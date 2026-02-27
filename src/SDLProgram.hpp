@@ -19,7 +19,7 @@ struct SDLProgram {
     }
 
     int initialize(int width, int height) {
-        if(SDL_Init(SDL_INIT_EVENTS) < 0) {
+        if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) {
             return -1;
         }
 
@@ -32,7 +32,7 @@ struct SDLProgram {
         screenWidth = width;
         screenHeight = height;
 
-        renderer = new SDLRenderer(width, height);
+        renderer = new SDLRenderer(window, width, height);
 
         return 0;
     }
