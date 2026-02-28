@@ -463,4 +463,8 @@ uint32_t lerpColor(uint32_t from, uint32_t to, float t) {
   return (uint32_t)(from + t * (to - from));
 }
 
+float edgeFunction(const Vector2& a, const Vector2& b, float x, float y) {
+  return (x - a.x) * (b.y - a.y) - (y - a.y) * (b.x - a.x);
+}
+
 } // namespace math

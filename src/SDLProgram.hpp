@@ -7,6 +7,7 @@
 
 #include <SDL.h>
 #include "SDLRenderer.hpp"
+#include "Log.hpp"
 
 struct SDLProgram {
     ~SDLProgram() {
@@ -20,12 +21,14 @@ struct SDLProgram {
 
     int initialize(int width, int height) {
         if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0) {
+					  Logf("SDL could not initialize! SDL_Error: %s", SDL_GetError());
             return -1;
         }
 
         window = SDL_CreateWindow("cpu-rasterizer", SDL_WINDOWPOS_CENTERED, 
             SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_SHOWN);
         if(window == nullptr) {
+					  Logf("Window could not be created! SDL_Error: %s", SDL_GetError());
             return -1;
         }
 
@@ -72,6 +75,7 @@ struct SDLProgram {
     }
 
     int run() {
+			  Logf("Start main loop");
         while(not quit) {
             updateTime();
             handlePollEvent();

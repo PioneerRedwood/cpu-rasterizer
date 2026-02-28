@@ -180,5 +180,18 @@ void setupViewportMatrix(Matrix4x4& out, float x, float y, float w, float h, flo
 
 uint32_t lerpColor(uint32_t from, uint32_t to, float t);
 
+/**
+ * 두 벡터로 이루어진 면과 주어진 정점 사이를 수학적으로 계산
+ * 결과값이 0인 경우: 그 면에 정점이 위치
+ * 결과값이 0보다 큰 경우: 그 면보다 앞에 위치
+ * 결과값이 0보다 작은 경우: 그 면보다 뒤에 위치
+ * 
+ * "한 점이 삼각형의 각 변 기준으로 어느 쪽에 있는지" 판단하는 것도 가능
+ * x, y를 각 값으로 가지고 있는 정점을 P라고 가정 (결과값은 edge)
+ * edge > 0  : 점P는 선분 a->b 왼쪽에 위치
+ * edge < 0  : 점P는 선분 a->b 오른쪽에 위치
+ * edge == 0 : 점P는 선분에 위치
+ */
+float edgeFunction(const Vector2& a, const Vector2& b, float x, float y);
 
 } // namespace math
