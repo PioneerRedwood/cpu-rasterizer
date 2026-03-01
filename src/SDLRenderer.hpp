@@ -33,9 +33,9 @@ struct SDLRenderer
     void buildTriangle()
     {
         // Build some vertices for drawing triangle
-        triVerts[0] = { -1.0f, +1.0f, +0.0f };
-        triVerts[1] = { +1.0f, +1.0f, +0.0f };
-        triVerts[2] = { +0.0f, -1.0f, +0.0f };
+        triVerts[0] = { -1.0f, -1.0f, +0.0f };
+        triVerts[1] = { +1.0f, -1.0f, +0.0f };
+        triVerts[2] = { +0.0f, +1.0f, +0.0f };
     }
 
     void drawPoint(int x, int y, int color)
@@ -133,12 +133,13 @@ struct SDLRenderer
 
     void renderTriangleLines()
     {
-        // Matrix4x4 rotateMat = Matrix4x4::identity;
-        // triRotateRadian += 0.6f;
-        // rotateMat.rotateY(triRotateRadian);
+        Matrix4x4 rotateMat = Matrix4x4::identity;
+        triRotateRadian += 0.06f;
+        rotateMat.rotateY(triRotateRadian);
 
         Vector3 tri[3];
         for(int i = 0; i < 3; ++i) {
+					  triVerts[i] = rotateMat * triVerts[i];
             Vector4 v = { triVerts[i].x, triVerts[i].y, triVerts[i].z, 1.0f };
             transformToScreen(v);
             tri[i].x = v.x, tri[i].y = v.y, tri[i].z = v.z;
@@ -174,7 +175,7 @@ struct SDLRenderer
         SDL_UpdateTexture(mainTexture, nullptr, framebuffer, width * 4);
         SDL_RenderCopy(renderer, mainTexture, nullptr, nullptr);
         SDL_RenderPresent(renderer);
-        SDL_Delay(1);
+        SDL_Delay(16);
     }
 
     int width;
