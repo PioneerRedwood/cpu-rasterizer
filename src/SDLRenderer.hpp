@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <SDL.h>
 #include "WorldCamera.hpp"
 
@@ -20,8 +21,8 @@ struct SDLRenderer
 
 		setupMatrices();
 
-		// buildTriangle();
-		buildCube();
+		buildTriangle();
+		// buildCube();
 	}
 
 	~SDLRenderer()
@@ -132,7 +133,7 @@ struct SDLRenderer
 		triVerts[2] = {+0.0f, +1.0f, +0.0f};
 	}
 
-	void renderTriangleLines()
+	void renderTriangle()
 	{
 		Matrix4x4 rotateMat = Matrix4x4::identity;
 		rotateRadian += 0.06f;
@@ -147,10 +148,55 @@ struct SDLRenderer
 			tri[i].x = v.x, tri[i].y = v.y, tri[i].z = v.z;
 		}
 
+		const int fillColor = 0xFF33AAFF;
+		fillTriangleBarycentric(tri[0], tri[1], tri[2], fillColor);
+
 		const int whiteColor = 0xFFFFFFFF;
 		drawLine({tri[0].x, tri[0].y}, {tri[1].x, tri[1].y}, whiteColor);
 		drawLine({tri[1].x, tri[1].y}, {tri[2].x, tri[2].y}, whiteColor);
 		drawLine({tri[0].x, tri[0].y}, {tri[2].x, tri[2].y}, whiteColor);
+	}
+
+	void fillTriangleBarycentric(const Vector3 &v0, const Vector3 &v1, const Vector3 &v2, int color)
+	{
+		const float minX = std::min({v0.x, v1.x, v2.x});
+		const float maxX = std::max({v0.x, v1.x, v2.x});
+		const float minY = std::min({v0.y, v1.y, v2.y});
+		const float maxY = std::max({v0.y, v1.y, v2.y});
+
+		const int x0 = std::max(0, (int)std::floor(minX));
+		const int y0 = std::max(0, (int)std::floor(minY));
+		const int x1 = std::min(width - 1, (int)std::ceil(maxX));
+		const int y1 = std::min(height - 1, (int)std::ceil(maxY));
+
+		const Vector2 p0{v0.x, v0.y};
+		const Vector2 p1{v1.x, v1.y};
+		const Vector2 p2{v2.x, v2.y};
+		const float area = math::edgeFunction(p0, p1, v2.x, v2.y);
+		if (std::abs(area) < 1e-6f)
+		{
+			return;
+		}
+
+		for (int y = y0; y <= y1; ++y)
+		{
+			for (int x = x0; x <= x1; ++x)
+			{
+				const float px = (float)x + 0.5f;
+				const float py = (float)y + 0.5f;
+
+				const float w0 = math::edgeFunction(p1, p2, px, py);
+				const float w1 = math::edgeFunction(p2, p0, px, py);
+				const float w2 = math::edgeFunction(p0, p1, px, py);
+
+				const bool insideCCW = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f);
+				const bool insideCW = (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
+				if ((area > 0.0f && insideCCW) || (area < 0.0f && insideCW))
+				{
+					drawPoint(x, y, color);
+				}
+			}
+		}
 	}
 
 	void buildCube()
@@ -218,8 +264,8 @@ struct SDLRenderer
 	{
 		memset((char *)framebuffer, 0, sizeof(int) * width * height);
 
-		// renderTriangleLines();
-		renderCubeLines();
+		renderTriangle();
+		// renderCubeLines();
 
 		SDL_UpdateTexture(mainTexture, nullptr, framebuffer, width * 4);
 		SDL_RenderCopy(renderer, mainTexture, nullptr, nullptr);
@@ -248,4 +294,7 @@ struct SDLRenderer
 	// Start Draw Cube
 	Vector3 cubeVerts[8];
 	// End Draw Cube
+
+	// Texture binding
+
 };
