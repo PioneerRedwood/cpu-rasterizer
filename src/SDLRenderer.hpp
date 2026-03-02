@@ -11,6 +11,8 @@ struct SDLRenderer
 	{
 		framebuffer = new unsigned int[width * height];
 		camera = new WorldCamera();
+		zbuffer = new float[width * height];
+		std::fill(zbuffer, zbuffer + width * height, 1.0f);
 
 		renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 		mainTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
@@ -22,12 +24,13 @@ struct SDLRenderer
 		setupMatrices();
 
 		buildTriangle();
-		// buildCube();
+		buildCube();
 	}
 
 	~SDLRenderer()
 	{
 		delete[] framebuffer;
+		delete[] zbuffer;
 		SDL_DestroyTexture(mainTexture);
 		SDL_DestroyRenderer(renderer);
 	}
@@ -142,15 +145,17 @@ struct SDLRenderer
 		Vector3 tri[3];
 		for (int i = 0; i < 3; ++i)
 		{
-			triVerts[i] = rotateMat * triVerts[i];
-			Vector4 v = {triVerts[i].x, triVerts[i].y, triVerts[i].z, 1.0f};
+			const Vector3 rotated = rotateMat * triVerts[i];
+			Vector4 v = {rotated.x, rotated.y, rotated.z, 1.0f};
 			transformToScreen(v);
 			tri[i].x = v.x, tri[i].y = v.y, tri[i].z = v.z;
 		}
 
 		const int fillColor = 0xFF33AAFF;
-		fillTriangleBarycentric(tri[0], tri[1], tri[2], fillColor);
+		// fillTriangleBarycentric(tri[0], tri[1], tri[2], fillColor);
+		drawTri(tri[0], tri[1], tri[2], fillColor, true);
 
+		// Draw edges
 		const int whiteColor = 0xFFFFFFFF;
 		drawLine({tri[0].x, tri[0].y}, {tri[1].x, tri[1].y}, whiteColor);
 		drawLine({tri[1].x, tri[1].y}, {tri[2].x, tri[2].y}, whiteColor);
@@ -199,18 +204,86 @@ struct SDLRenderer
 		}
 	}
 
+	void drawTri(const Vector3 &v0, const Vector3 &v1, const Vector3 &v2, int color, bool cullBackface = true)
+	{
+		const float minX = std::min({v0.x, v1.x, v2.x});
+		const float maxX = std::max({v0.x, v1.x, v2.x});
+		const float minY = std::min({v0.y, v1.y, v2.y});
+		const float maxY = std::max({v0.y, v1.y, v2.y});
+
+		const int x0 = std::max(0, (int)std::floor(minX));
+		const int y0 = std::max(0, (int)std::floor(minY));
+		const int x1 = std::min(width - 1, (int)std::ceil(maxX));
+		const int y1 = std::min(height - 1, (int)std::ceil(maxY));
+
+		const Vector2 p0{v0.x, v0.y};
+		const Vector2 p1{v1.x, v1.y};
+		const Vector2 p2{v2.x, v2.y};
+		const float area = math::edgeFunction(p0, p1, v2.x, v2.y);
+		if (std::abs(area) < 1e-6f)
+		{
+			return;
+		}
+
+		// Back-face culling
+		if (cullBackface && area > 0.0f)
+		{
+			return;
+		}
+
+		for (int y = y0; y <= y1; ++y)
+		{
+			for (int x = x0; x <= x1; ++x)
+			{
+				const float px = (float)x + 0.5f;
+				const float py = (float)y + 0.5f;
+
+				const float w0 = math::edgeFunction(p1, p2, px, py);
+				const float w1 = math::edgeFunction(p2, p0, px, py);
+				const float w2 = math::edgeFunction(p0, p1, px, py);
+
+				const bool insideCCW = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f);
+				const bool insideCW = (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
+
+				const bool checkInside = cullBackface
+											 ? insideCW
+											 : ((area > 0.0f && insideCCW) || (area < 0.0f && insideCW));
+
+				if (checkInside)
+				{
+					// Zbuffer test
+					const float invArea = 1.0f / area;
+					const float b0 = w0 * invArea;
+					const float b1 = w1 * invArea;
+					const float b2 = w2 * invArea;
+
+					const float z = b0 * v0.z + b1 * v1.z + b2 * v2.z;
+					if (z < 0.0f || z > 1.0f)
+						continue;
+
+					const int idx = x + y * width;
+					if (z < zbuffer[idx])
+					{
+						zbuffer[idx] = z;
+						framebuffer[idx] = color;
+					}
+				}
+			}
+		}
+	}
+
 	void buildCube()
 	{
 		// Build some vertices for drawing cube
 		cubeVerts[0] = {-1.0f, -1.0f, -1.0f};
-		cubeVerts[1] = {+1.0f, -1.0f, -1.0f};
+		cubeVerts[1] = {-1.0f, +1.0f, -1.0f};
 		cubeVerts[2] = {+1.0f, +1.0f, -1.0f};
-		cubeVerts[3] = {-1.0f, +1.0f, -1.0f};
+		cubeVerts[3] = {+1.0f, -1.0f, -1.0f};
 
 		cubeVerts[4] = {-1.0f, -1.0f, +1.0f};
-		cubeVerts[5] = {+1.0f, -1.0f, +1.0f};
+		cubeVerts[5] = {-1.0f, +1.0f, +1.0f};
 		cubeVerts[6] = {+1.0f, +1.0f, +1.0f};
-		cubeVerts[7] = {-1.0f, +1.0f, +1.0f};
+		cubeVerts[7] = {+1.0f, -1.0f, +1.0f};
 	}
 
 	void renderCubeLines()
@@ -222,12 +295,32 @@ struct SDLRenderer
 		Vector3 cube[8];
 		for (int i = 0; i < 8; ++i)
 		{
-			cubeVerts[i] = rotateMat * cubeVerts[i];
-			Vector4 v = {cubeVerts[i].x, cubeVerts[i].y, cubeVerts[i].z, 1.0f};
+			const Vector3 rotated = rotateMat * cubeVerts[i];
+			Vector4 v = {rotated.x, rotated.y, rotated.z, 1.0f};
 			transformToScreen(v);
 			cube[i].x = v.x, cube[i].y = v.y, cube[i].z = v.z;
 		}
 
+		const int fillColor = 0XFF33AAFF;
+		// Front
+		drawTri(cube[0], cube[1], cube[2], fillColor, true);
+		drawTri(cube[0], cube[2], cube[3], fillColor, true);
+		//Back
+		drawTri(cube[4], cube[5], cube[6], fillColor, true);
+		drawTri(cube[4], cube[6], cube[7], fillColor, true);
+		// Top
+		drawTri(cube[1], cube[5], cube[6], fillColor, true);
+		drawTri(cube[1], cube[6], cube[7], fillColor, true);
+		// Bottom
+		drawTri(cube[0], cube[4], cube[7], fillColor, true);
+		drawTri(cube[0], cube[7], cube[3], fillColor, true);
+		// Right
+		drawTri(cube[3], cube[2], cube[6], fillColor, true);
+		drawTri(cube[3], cube[6], cube[7], fillColor, true);
+		// Left
+		drawTri(cube[0], cube[1], cube[5], fillColor, true);
+		drawTri(cube[0], cube[5], cube[4], fillColor, true);
+		
 		const int whiteColor = 0xFFFFFFFF;
 		drawLine({cube[0].x, cube[0].y}, {cube[1].x, cube[1].y}, whiteColor);
 		drawLine({cube[1].x, cube[1].y}, {cube[2].x, cube[2].y}, whiteColor);
@@ -263,27 +356,29 @@ struct SDLRenderer
 	void render(double delta)
 	{
 		memset((char *)framebuffer, 0, sizeof(int) * width * height);
+		std::fill(zbuffer, zbuffer + width * height, 1.0f);
 
-		renderTriangle();
-		// renderCubeLines();
+		// renderTriangle();
+		renderCubeLines();
 
 		SDL_UpdateTexture(mainTexture, nullptr, framebuffer, width * 4);
 		SDL_RenderCopy(renderer, mainTexture, nullptr, nullptr);
 		SDL_RenderPresent(renderer);
-		SDL_Delay(16);
+		SDL_Delay(32);
 	}
 
-	int width;
-	int height;
-	unsigned int *framebuffer;
-	WorldCamera *camera;
+	int width{0};
+	int height{0};
+	unsigned int *framebuffer{nullptr};
+	WorldCamera *camera{nullptr};
 
 	Matrix4x4 viewportMatrix, projectionMatrix, cameraMatrix;
 
-	SDL_Renderer *renderer;
-	SDL_Texture *mainTexture;
+	SDL_Renderer *renderer{nullptr};
+	SDL_Texture *mainTexture{nullptr};
+	float *zbuffer{nullptr};
 
-	const float kZNear = 0.1f, kZFar = 10.0f;
+	const float kZNear{0.1f}, kZFar{10.0f};
 
 	float rotateRadian{0.0f};
 
@@ -294,7 +389,4 @@ struct SDLRenderer
 	// Start Draw Cube
 	Vector3 cubeVerts[8];
 	// End Draw Cube
-
-	// Texture binding
-
 };

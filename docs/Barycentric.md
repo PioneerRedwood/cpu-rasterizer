@@ -219,3 +219,7 @@ To move closer to GPU-like behavior, useful incremental improvements are:
 3. Z-buffer and early depth test in the raster loop.
 4. Perspective-correct attribute interpolation.
 5. Tile/bin based raster traversal for cache locality.
+
+## 13) Useful website to understand the concept
+
+https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation/rasterization-stage.html
