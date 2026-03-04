@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <SDL.h>
 #include "WorldCamera.hpp"
+#include "TextureLoader.hpp"
 
-struct SDLRenderer
+class SDLRenderer
 {
+public:
 	SDLRenderer(SDL_Window *window, int width, int height)
 		: width(width), height(height)
 	{
@@ -25,16 +27,39 @@ struct SDLRenderer
 
 		buildTriangle();
 		buildCube();
+
+		textureLoader = new TextureLoader("resources");
+		tgaTexture = textureLoader->loadTGATextureWithName(renderer, "keep-carm.tga");
+		if (tgaTexture == nullptr) {
+			Logf("Failed to load texture");
+		}
 	}
 
 	~SDLRenderer()
 	{
 		delete[] framebuffer;
 		delete[] zbuffer;
+		delete camera;
+		delete textureLoader;
 		SDL_DestroyTexture(mainTexture);
 		SDL_DestroyRenderer(renderer);
 	}
 
+	void render(double delta)
+	{
+		memset((char *)framebuffer, 0, sizeof(int) * width * height);
+		std::fill(zbuffer, zbuffer + width * height, 1.0f);
+
+		renderTriangle();
+		// renderCubeLines();
+
+		SDL_UpdateTexture(mainTexture, nullptr, framebuffer, width * 4);
+		SDL_RenderCopy(renderer, mainTexture, nullptr, nullptr);
+		SDL_RenderPresent(renderer);
+		SDL_Delay(32);
+	}
+
+private:
 	void drawPoint(int x, int y, int color)
 	{
 		if (x >= width || x < 0)
@@ -128,6 +153,21 @@ struct SDLRenderer
 		}
 	}
 
+	void transformToScreen(Vector4 &point)
+	{
+		point = projectionMatrix * (cameraMatrix * point);
+		point.perspectiveDivide();
+		point = viewportMatrix * point;
+	}
+
+	void setupMatrices()
+	{
+		math::setupCameraMatrix(cameraMatrix, camera->eye, camera->at, camera->up);
+		math::setupPerspectiveProjectionMatrix(projectionMatrix, camera->fov,
+											   camera->aspect, kZNear, kZFar);
+		math::setupViewportMatrix(viewportMatrix, 0, 0, width, height, kZNear, kZFar);
+	}
+
 	void buildTriangle()
 	{
 		// Build some vertices for drawing triangle
@@ -139,7 +179,7 @@ struct SDLRenderer
 	void renderTriangle()
 	{
 		Matrix4x4 rotateMat = Matrix4x4::identity;
-		rotateRadian += 0.06f;
+		rotateRadian += 0.6f;
 		rotateMat.rotateY(rotateRadian);
 
 		Vector3 tri[3];
@@ -151,9 +191,16 @@ struct SDLRenderer
 			tri[i].x = v.x, tri[i].y = v.y, tri[i].z = v.z;
 		}
 
-		const int fillColor = 0xFF33AAFF;
+		 const int fillColor = 0xFF33AAFF;
+
+		// #1
 		// fillTriangleBarycentric(tri[0], tri[1], tri[2], fillColor);
-		drawTri(tri[0], tri[1], tri[2], fillColor, true);
+		
+		// #2
+		 drawTri(tri[0], tri[1], tri[2], fillColor, true);
+		
+		// #3
+		//fillTriangleTexture(tri[0], tri[1], tri[2], tgaTexture->pixelData());
 
 		// Draw edges
 		const int whiteColor = 0xFFFFFFFF;
@@ -338,35 +385,119 @@ struct SDLRenderer
 		drawLine({cube[3].x, cube[3].y}, {cube[7].x, cube[7].y}, whiteColor);
 	}
 
-	void transformToScreen(Vector4 &point)
-	{
-		point = projectionMatrix * (cameraMatrix * point);
-		point.perspectiveDivide();
-		point = viewportMatrix * point;
+	void fillTriangleTexture(const Vector3 &v0, const Vector3 &v1, const Vector3 &v2, const RGBA* bitmap) {
+		if (bitmap == nullptr || tgaTexture == nullptr)
+		{
+			return;
+		}
+
+		const TGAHeader *header = tgaTexture->header();
+		const int texWidth = (int)header->width;
+		const int texHeight = (int)header->height;
+		if (texWidth <= 0 || texHeight <= 0)
+		{
+			return;
+		}
+
+		const float minX = std::min({v0.x, v1.x, v2.x});
+		const float maxX = std::max({v0.x, v1.x, v2.x});
+		const float minY = std::min({v0.y, v1.y, v2.y});
+		const float maxY = std::max({v0.y, v1.y, v2.y});
+
+		const int x0 = std::max(0, (int)std::floor(minX));
+		const int y0 = std::max(0, (int)std::floor(minY));
+		const int x1 = std::min(width - 1, (int)std::ceil(maxX));
+		const int y1 = std::min(height - 1, (int)std::ceil(maxY));
+		if (x0 > x1 || y0 > y1)
+		{
+			return;
+		}
+
+		const Vector2 p0{v0.x, v0.y};
+		const Vector2 p1{v1.x, v1.y};
+		const Vector2 p2{v2.x, v2.y};
+		const float area = math::edgeFunction(p0, p1, v2.x, v2.y);
+		if (std::abs(area) < 1e-6f)
+		{
+			return;
+		}
+
+		if (area > 0.0f)
+		{
+			return;
+		}
+
+		const float invArea = 1.0f / area;
+		const int texMaxX = texWidth - 1;
+		const int texMaxY = texHeight - 1;
+
+		const float stepW0X = p2.y - p1.y;
+		const float stepW1X = p0.y - p2.y;
+		const float stepW2X = p1.y - p0.y;
+
+		const float stepW0Y = p1.x - p2.x;
+		const float stepW1Y = p2.x - p0.x;
+		const float stepW2Y = p0.x - p1.x;
+
+		const float startX = (float)x0 + 0.5f;
+		const float startY = (float)y0 + 0.5f;
+
+		float w0Row = math::edgeFunction(p1, p2, startX, startY);
+		float w1Row = math::edgeFunction(p2, p0, startX, startY);
+		float w2Row = math::edgeFunction(p0, p1, startX, startY);
+
+		for (int y = y0; y <= y1; ++y)
+		{
+			float w0 = w0Row;
+			float w1 = w1Row;
+			float w2 = w2Row;
+			int idx = x0 + y * width;
+
+			for (int x = x0; x <= x1; ++x, ++idx)
+			{
+				if (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f)
+				{
+					const float b0 = w0 * invArea;
+					const float b1 = w1 * invArea;
+					const float b2 = w2 * invArea;
+
+					const float z = b0 * v0.z + b1 * v1.z + b2 * v2.z;
+					if (z >= 0.0f && z <= 1.0f && z < zbuffer[idx])
+					{
+						zbuffer[idx] = z;
+
+						float u = b1 + (0.5f * b2);
+						float v = b0 + b1;
+						u = std::max(0.0f, std::min(1.0f, u));
+						v = std::max(0.0f, std::min(1.0f, v));
+
+						const int texX = std::min(texMaxX, std::max(0, (int)(u * (float)texMaxX + 0.5f)));
+						const int texY = std::min(texMaxY, std::max(0, (int)(v * (float)texMaxY + 0.5f)));
+						const RGBA &sample = bitmap[texX + texY * texWidth];
+
+						framebuffer[idx] = ((unsigned int)sample.a << 24) |
+										   ((unsigned int)sample.b << 16) |
+										   ((unsigned int)sample.g << 8) |
+										   (unsigned int)sample.r;
+					}
+				}
+
+				w0 += stepW0X;
+				w1 += stepW1X;
+				w2 += stepW2X;
+			}
+
+			w0Row += stepW0Y;
+			w1Row += stepW1Y;
+			w2Row += stepW2Y;
+		}
 	}
 
-	void setupMatrices()
-	{
-		math::setupCameraMatrix(cameraMatrix, camera->eye, camera->at, camera->up);
-		math::setupPerspectiveProjectionMatrix(projectionMatrix, camera->fov,
-											   camera->aspect, kZNear, kZFar);
-		math::setupViewportMatrix(viewportMatrix, 0, 0, width, height, kZNear, kZFar);
-	}
+	// TODO: Bilinear sampling
 
-	void render(double delta)
-	{
-		memset((char *)framebuffer, 0, sizeof(int) * width * height);
-		std::fill(zbuffer, zbuffer + width * height, 1.0f);
+	// TODO: Other shaders
 
-		// renderTriangle();
-		renderCubeLines();
-
-		SDL_UpdateTexture(mainTexture, nullptr, framebuffer, width * 4);
-		SDL_RenderCopy(renderer, mainTexture, nullptr, nullptr);
-		SDL_RenderPresent(renderer);
-		SDL_Delay(32);
-	}
-
+private:
 	int width{0};
 	int height{0};
 	unsigned int *framebuffer{nullptr};
@@ -376,6 +507,7 @@ struct SDLRenderer
 
 	SDL_Renderer *renderer{nullptr};
 	SDL_Texture *mainTexture{nullptr};
+	TextureLoader *textureLoader {nullptr};
 	float *zbuffer{nullptr};
 
 	const float kZNear{0.1f}, kZFar{10.0f};
@@ -389,4 +521,8 @@ struct SDLRenderer
 	// Start Draw Cube
 	Vector3 cubeVerts[8];
 	// End Draw Cube
+
+	// Start Draw Textured Tri
+	TGA* tgaTexture { nullptr };
+	// End Draw Textured Tri
 };
