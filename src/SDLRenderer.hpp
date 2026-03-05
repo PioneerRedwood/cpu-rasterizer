@@ -30,7 +30,8 @@ public:
 
 		textureLoader = new TextureLoader("resources");
 		tgaTexture = textureLoader->loadTGATextureWithName(renderer, "keep-carm.tga");
-		if (tgaTexture == nullptr) {
+		if (tgaTexture == nullptr)
+		{
 			Logf("Failed to load texture");
 		}
 	}
@@ -191,16 +192,16 @@ private:
 			tri[i].x = v.x, tri[i].y = v.y, tri[i].z = v.z;
 		}
 
-		 const int fillColor = 0xFF33AAFF;
+		const int fillColor = 0xFF33AAFF;
 
 		// #1
 		// fillTriangleBarycentric(tri[0], tri[1], tri[2], fillColor);
-		
+
 		// #2
-		 drawTri(tri[0], tri[1], tri[2], fillColor, true);
-		
+		// drawTri(tri[0], tri[1], tri[2], fillColor, true);
+
 		// #3
-		//fillTriangleTexture(tri[0], tri[1], tri[2], tgaTexture->pixelData());
+		fillTriangleTexture(tri[0], tri[1], tri[2], tgaTexture->pixelData());
 
 		// Draw edges
 		const int whiteColor = 0xFFFFFFFF;
@@ -272,8 +273,8 @@ private:
 			return;
 		}
 
-		// Back-face culling
-		if (cullBackface && area > 0.0f)
+		// Back-face culling (treat CCW as front-facing)
+		if (cullBackface && area < 0.0f)
 		{
 			return;
 		}
@@ -293,7 +294,7 @@ private:
 				const bool insideCW = (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
 
 				const bool checkInside = cullBackface
-											 ? insideCW
+											 ? insideCCW
 											 : ((area > 0.0f && insideCCW) || (area < 0.0f && insideCW));
 
 				if (checkInside)
@@ -352,7 +353,7 @@ private:
 		// Front
 		drawTri(cube[0], cube[1], cube[2], fillColor, true);
 		drawTri(cube[0], cube[2], cube[3], fillColor, true);
-		//Back
+		// Back
 		drawTri(cube[4], cube[5], cube[6], fillColor, true);
 		drawTri(cube[4], cube[6], cube[7], fillColor, true);
 		// Top
@@ -367,7 +368,7 @@ private:
 		// Left
 		drawTri(cube[0], cube[1], cube[5], fillColor, true);
 		drawTri(cube[0], cube[5], cube[4], fillColor, true);
-		
+
 		const int whiteColor = 0xFFFFFFFF;
 		drawLine({cube[0].x, cube[0].y}, {cube[1].x, cube[1].y}, whiteColor);
 		drawLine({cube[1].x, cube[1].y}, {cube[2].x, cube[2].y}, whiteColor);
@@ -385,7 +386,8 @@ private:
 		drawLine({cube[3].x, cube[3].y}, {cube[7].x, cube[7].y}, whiteColor);
 	}
 
-	void fillTriangleTexture(const Vector3 &v0, const Vector3 &v1, const Vector3 &v2, const RGBA* bitmap) {
+	void fillTriangleTexture(const Vector3 &v0, const Vector3 &v1, const Vector3 &v2, const RGBA *bitmap)
+	{
 		if (bitmap == nullptr || tgaTexture == nullptr)
 		{
 			return;
@@ -422,7 +424,8 @@ private:
 			return;
 		}
 
-		if (area > 0.0f)
+		// Back-face culling (treat CCW as front-facing)
+		if (area < 0.0f)
 		{
 			return;
 		}
@@ -455,7 +458,7 @@ private:
 
 			for (int x = x0; x <= x1; ++x, ++idx)
 			{
-				if (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f)
+				if (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f)
 				{
 					const float b0 = w0 * invArea;
 					const float b1 = w1 * invArea;
@@ -507,7 +510,7 @@ private:
 
 	SDL_Renderer *renderer{nullptr};
 	SDL_Texture *mainTexture{nullptr};
-	TextureLoader *textureLoader {nullptr};
+	TextureLoader *textureLoader{nullptr};
 	float *zbuffer{nullptr};
 
 	const float kZNear{0.1f}, kZFar{10.0f};
@@ -523,6 +526,6 @@ private:
 	// End Draw Cube
 
 	// Start Draw Textured Tri
-	TGA* tgaTexture { nullptr };
+	TGA *tgaTexture{nullptr};
 	// End Draw Textured Tri
 };
