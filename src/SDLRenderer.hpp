@@ -4,11 +4,12 @@
 #include <SDL.h>
 #include "WorldCamera.hpp"
 #include "TextureLoader.hpp"
+#include "Mesh.hpp"
 
 class SDLRenderer
 {
 public:
-	SDLRenderer(SDL_Window *window, int width, int height)
+	SDLRenderer(SDL_Window* window, int width, int height)
 		: width(width), height(height)
 	{
 		framebuffer = new unsigned int[width * height];
@@ -18,7 +19,7 @@ public:
 
 		renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 		mainTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
-										SDL_TEXTUREACCESS_STREAMING, width, height);
+			SDL_TEXTUREACCESS_STREAMING, width, height);
 
 		camera->aspect = (float)width / height;
 		camera->fov = 45.0f;
@@ -34,6 +35,9 @@ public:
 		{
 			Logf("Failed to load texture");
 		}
+
+		//m_SimpleCubeMesh = loadSimpleMeshFromObj("resources/simplified_stanford_bunny.obj");
+		buildSimpleCubeMesh();
 	}
 
 	~SDLRenderer()
@@ -48,11 +52,12 @@ public:
 
 	void render(double delta)
 	{
-		memset((char *)framebuffer, 0, sizeof(int) * width * height);
+		memset((char*)framebuffer, 0, sizeof(int) * width * height);
 		std::fill(zbuffer, zbuffer + width * height, 1.0f);
 
-		renderTriangle();
+		//renderTriangle();
 		// renderCubeLines();
+		renderCubeMesh(delta);
 
 		SDL_UpdateTexture(mainTexture, nullptr, framebuffer, width * 4);
 		SDL_RenderCopy(renderer, mainTexture, nullptr, nullptr);
@@ -74,61 +79,61 @@ private:
 	/**
 	 * Draw line with Bresenham algorithm
 	 */
-	void drawLine(const Vector2 &startPos, const Vector2 &endPos, int color)
+	void drawLine(const Vector2& startPos, const Vector2& endPos, int color)
 	{
 		auto drawLow = [this](int x0, int y0, int x1, int y1, int color)
-		{
-			int dx = x1 - x0, dy = y1 - y0;
-			int yi = 1;
-			if (dy < 0)
 			{
-				yi = -1;
-				dy = -dy;
-			}
-			int d = (2 * dy) - dx;
-			int y = y0;
+				int dx = x1 - x0, dy = y1 - y0;
+				int yi = 1;
+				if (dy < 0)
+				{
+					yi = -1;
+					dy = -dy;
+				}
+				int d = (2 * dy) - dx;
+				int y = y0;
 
-			for (int x = x0; x < x1; ++x)
-			{
-				drawPoint(x, y, color);
-				if (d > 0)
+				for (int x = x0; x < x1; ++x)
 				{
-					y = y + yi;
-					d = d + (2 * (dy - dx));
+					drawPoint(x, y, color);
+					if (d > 0)
+					{
+						y = y + yi;
+						d = d + (2 * (dy - dx));
+					}
+					else
+					{
+						d = d + 2 * dy;
+					}
 				}
-				else
-				{
-					d = d + 2 * dy;
-				}
-			}
-		};
+			};
 
 		auto drawHigh = [this](int x0, int y0, int x1, int y1, int color)
-		{
-			int dx = x1 - x0, dy = y1 - y0;
-			int xi = 1;
-			if (dx < 0)
 			{
-				xi = -1;
-				dx = -dx;
-			}
-			int d = (2 * dx) - dy;
-			int x = x0;
+				int dx = x1 - x0, dy = y1 - y0;
+				int xi = 1;
+				if (dx < 0)
+				{
+					xi = -1;
+					dx = -dx;
+				}
+				int d = (2 * dx) - dy;
+				int x = x0;
 
-			for (int y = y0; y < y1; ++y)
-			{
-				drawPoint(x, y, color);
-				if (d > 0)
+				for (int y = y0; y < y1; ++y)
 				{
-					x = x + xi;
-					d = d + (2 * (dx - dy));
+					drawPoint(x, y, color);
+					if (d > 0)
+					{
+						x = x + xi;
+						d = d + (2 * (dx - dy));
+					}
+					else
+					{
+						d = d + 2 * dx;
+					}
 				}
-				else
-				{
-					d = d + 2 * dx;
-				}
-			}
-		};
+			};
 
 		if (abs(endPos.y - startPos.y) < abs(endPos.x - startPos.x))
 		{
@@ -154,7 +159,7 @@ private:
 		}
 	}
 
-	void transformToScreen(Vector4 &point)
+	void transformToScreen(Vector4& point)
 	{
 		point = projectionMatrix * (cameraMatrix * point);
 		point.perspectiveDivide();
@@ -165,16 +170,16 @@ private:
 	{
 		math::setupCameraMatrix(cameraMatrix, camera->eye, camera->at, camera->up);
 		math::setupPerspectiveProjectionMatrix(projectionMatrix, camera->fov,
-											   camera->aspect, kZNear, kZFar);
+			camera->aspect, kZNear, kZFar);
 		math::setupViewportMatrix(viewportMatrix, 0, 0, width, height, kZNear, kZFar);
 	}
 
 	void buildTriangle()
 	{
 		// Build some vertices for drawing triangle
-		triVerts[0] = {-1.0f, -1.0f, +0.0f};
-		triVerts[1] = {+1.0f, -1.0f, +0.0f};
-		triVerts[2] = {+0.0f, +1.0f, +0.0f};
+		triVerts[0] = { -1.0f, -1.0f, +0.0f };
+		triVerts[1] = { +1.0f, -1.0f, +0.0f };
+		triVerts[2] = { +0.0f, +1.0f, +0.0f };
 	}
 
 	void renderTriangle()
@@ -187,7 +192,7 @@ private:
 		for (int i = 0; i < 3; ++i)
 		{
 			const Vector3 rotated = rotateMat * triVerts[i];
-			Vector4 v = {rotated.x, rotated.y, rotated.z, 1.0f};
+			Vector4 v = { rotated.x, rotated.y, rotated.z, 1.0f };
 			transformToScreen(v);
 			tri[i].x = v.x, tri[i].y = v.y, tri[i].z = v.z;
 		}
@@ -205,26 +210,27 @@ private:
 
 		// Draw edges
 		const int whiteColor = 0xFFFFFFFF;
-		drawLine({tri[0].x, tri[0].y}, {tri[1].x, tri[1].y}, whiteColor);
-		drawLine({tri[1].x, tri[1].y}, {tri[2].x, tri[2].y}, whiteColor);
-		drawLine({tri[0].x, tri[0].y}, {tri[2].x, tri[2].y}, whiteColor);
+		drawLine({ tri[0].x, tri[0].y }, { tri[1].x, tri[1].y }, whiteColor);
+		drawLine({ tri[1].x, tri[1].y }, { tri[2].x, tri[2].y }, whiteColor);
+		drawLine({ tri[0].x, tri[0].y }, { tri[2].x, tri[2].y }, whiteColor);
 	}
 
-	void fillTriangleBarycentric(const Vector3 &v0, const Vector3 &v1, const Vector3 &v2, int color)
+	void fillTriangleBarycentric(const Vector3& v0, const Vector3& v1, const Vector3& v2,
+		int color)
 	{
-		const float minX = std::min({v0.x, v1.x, v2.x});
-		const float maxX = std::max({v0.x, v1.x, v2.x});
-		const float minY = std::min({v0.y, v1.y, v2.y});
-		const float maxY = std::max({v0.y, v1.y, v2.y});
+		const float minX = std::min({ v0.x, v1.x, v2.x });
+		const float maxX = std::max({ v0.x, v1.x, v2.x });
+		const float minY = std::min({ v0.y, v1.y, v2.y });
+		const float maxY = std::max({ v0.y, v1.y, v2.y });
 
 		const int x0 = std::max(0, (int)std::floor(minX));
 		const int y0 = std::max(0, (int)std::floor(minY));
 		const int x1 = std::min(width - 1, (int)std::ceil(maxX));
 		const int y1 = std::min(height - 1, (int)std::ceil(maxY));
 
-		const Vector2 p0{v0.x, v0.y};
-		const Vector2 p1{v1.x, v1.y};
-		const Vector2 p2{v2.x, v2.y};
+		const Vector2 p0{ v0.x, v0.y };
+		const Vector2 p1{ v1.x, v1.y };
+		const Vector2 p2{ v2.x, v2.y };
 		const float area = math::edgeFunction(p0, p1, v2.x, v2.y);
 		if (std::abs(area) < 1e-6f)
 		{
@@ -252,21 +258,22 @@ private:
 		}
 	}
 
-	void drawTri(const Vector3 &v0, const Vector3 &v1, const Vector3 &v2, int color, bool cullBackface = true)
+	void drawTri(const Vector3& v0, const Vector3& v1, const Vector3& v2, int color,
+		bool cullBackface = true)
 	{
-		const float minX = std::min({v0.x, v1.x, v2.x});
-		const float maxX = std::max({v0.x, v1.x, v2.x});
-		const float minY = std::min({v0.y, v1.y, v2.y});
-		const float maxY = std::max({v0.y, v1.y, v2.y});
+		const float minX = std::min({ v0.x, v1.x, v2.x });
+		const float maxX = std::max({ v0.x, v1.x, v2.x });
+		const float minY = std::min({ v0.y, v1.y, v2.y });
+		const float maxY = std::max({ v0.y, v1.y, v2.y });
 
 		const int x0 = std::max(0, (int)std::floor(minX));
 		const int y0 = std::max(0, (int)std::floor(minY));
 		const int x1 = std::min(width - 1, (int)std::ceil(maxX));
 		const int y1 = std::min(height - 1, (int)std::ceil(maxY));
 
-		const Vector2 p0{v0.x, v0.y};
-		const Vector2 p1{v1.x, v1.y};
-		const Vector2 p2{v2.x, v2.y};
+		const Vector2 p0{ v0.x, v0.y };
+		const Vector2 p1{ v1.x, v1.y };
+		const Vector2 p2{ v2.x, v2.y };
 		const float area = math::edgeFunction(p0, p1, v2.x, v2.y);
 		if (std::abs(area) < 1e-6f)
 		{
@@ -294,8 +301,8 @@ private:
 				const bool insideCW = (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
 
 				const bool checkInside = cullBackface
-											 ? insideCCW
-											 : ((area > 0.0f && insideCCW) || (area < 0.0f && insideCW));
+					? insideCCW
+					: ((area > 0.0f && insideCCW) || (area < 0.0f && insideCW));
 
 				if (checkInside)
 				{
@@ -323,15 +330,15 @@ private:
 	void buildCube()
 	{
 		// Build some vertices for drawing cube
-		cubeVerts[0] = {-1.0f, -1.0f, -1.0f};
-		cubeVerts[1] = {-1.0f, +1.0f, -1.0f};
-		cubeVerts[2] = {+1.0f, +1.0f, -1.0f};
-		cubeVerts[3] = {+1.0f, -1.0f, -1.0f};
+		cubeVerts[0] = { -1.0f, -1.0f, -1.0f };
+		cubeVerts[1] = { -1.0f, +1.0f, -1.0f };
+		cubeVerts[2] = { +1.0f, +1.0f, -1.0f };
+		cubeVerts[3] = { +1.0f, -1.0f, -1.0f };
 
-		cubeVerts[4] = {-1.0f, -1.0f, +1.0f};
-		cubeVerts[5] = {-1.0f, +1.0f, +1.0f};
-		cubeVerts[6] = {+1.0f, +1.0f, +1.0f};
-		cubeVerts[7] = {+1.0f, -1.0f, +1.0f};
+		cubeVerts[4] = { -1.0f, -1.0f, +1.0f };
+		cubeVerts[5] = { -1.0f, +1.0f, +1.0f };
+		cubeVerts[6] = { +1.0f, +1.0f, +1.0f };
+		cubeVerts[7] = { +1.0f, -1.0f, +1.0f };
 	}
 
 	void renderCubeLines()
@@ -344,7 +351,7 @@ private:
 		for (int i = 0; i < 8; ++i)
 		{
 			const Vector3 rotated = rotateMat * cubeVerts[i];
-			Vector4 v = {rotated.x, rotated.y, rotated.z, 1.0f};
+			Vector4 v = { rotated.x, rotated.y, rotated.z, 1.0f };
 			transformToScreen(v);
 			cube[i].x = v.x, cube[i].y = v.y, cube[i].z = v.z;
 		}
@@ -370,30 +377,31 @@ private:
 		drawTri(cube[0], cube[5], cube[4], fillColor, true);
 
 		const int whiteColor = 0xFFFFFFFF;
-		drawLine({cube[0].x, cube[0].y}, {cube[1].x, cube[1].y}, whiteColor);
-		drawLine({cube[1].x, cube[1].y}, {cube[2].x, cube[2].y}, whiteColor);
-		drawLine({cube[2].x, cube[2].y}, {cube[3].x, cube[3].y}, whiteColor);
-		drawLine({cube[3].x, cube[3].y}, {cube[0].x, cube[0].y}, whiteColor);
+		drawLine({ cube[0].x, cube[0].y }, { cube[1].x, cube[1].y }, whiteColor);
+		drawLine({ cube[1].x, cube[1].y }, { cube[2].x, cube[2].y }, whiteColor);
+		drawLine({ cube[2].x, cube[2].y }, { cube[3].x, cube[3].y }, whiteColor);
+		drawLine({ cube[3].x, cube[3].y }, { cube[0].x, cube[0].y }, whiteColor);
 
-		drawLine({cube[4].x, cube[4].y}, {cube[5].x, cube[5].y}, whiteColor);
-		drawLine({cube[5].x, cube[5].y}, {cube[6].x, cube[6].y}, whiteColor);
-		drawLine({cube[6].x, cube[6].y}, {cube[7].x, cube[7].y}, whiteColor);
-		drawLine({cube[7].x, cube[7].y}, {cube[4].x, cube[4].y}, whiteColor);
+		drawLine({ cube[4].x, cube[4].y }, { cube[5].x, cube[5].y }, whiteColor);
+		drawLine({ cube[5].x, cube[5].y }, { cube[6].x, cube[6].y }, whiteColor);
+		drawLine({ cube[6].x, cube[6].y }, { cube[7].x, cube[7].y }, whiteColor);
+		drawLine({ cube[7].x, cube[7].y }, { cube[4].x, cube[4].y }, whiteColor);
 
-		drawLine({cube[0].x, cube[0].y}, {cube[4].x, cube[4].y}, whiteColor);
-		drawLine({cube[1].x, cube[1].y}, {cube[5].x, cube[5].y}, whiteColor);
-		drawLine({cube[2].x, cube[2].y}, {cube[6].x, cube[6].y}, whiteColor);
-		drawLine({cube[3].x, cube[3].y}, {cube[7].x, cube[7].y}, whiteColor);
+		drawLine({ cube[0].x, cube[0].y }, { cube[4].x, cube[4].y }, whiteColor);
+		drawLine({ cube[1].x, cube[1].y }, { cube[5].x, cube[5].y }, whiteColor);
+		drawLine({ cube[2].x, cube[2].y }, { cube[6].x, cube[6].y }, whiteColor);
+		drawLine({ cube[3].x, cube[3].y }, { cube[7].x, cube[7].y }, whiteColor);
 	}
 
-	void fillTriangleTexture(const Vector3 &v0, const Vector3 &v1, const Vector3 &v2, const RGBA *bitmap)
+	void fillTriangleTexture(const Vector3& v0, const Vector3& v1, const Vector3& v2,
+		const RGBA* bitmap)
 	{
 		if (bitmap == nullptr || tgaTexture == nullptr)
 		{
 			return;
 		}
 
-		const TGAHeader *header = tgaTexture->header();
+		const TGAHeader* header = tgaTexture->header();
 		const int texWidth = (int)header->width;
 		const int texHeight = (int)header->height;
 		if (texWidth <= 0 || texHeight <= 0)
@@ -401,10 +409,10 @@ private:
 			return;
 		}
 
-		const float minX = std::min({v0.x, v1.x, v2.x});
-		const float maxX = std::max({v0.x, v1.x, v2.x});
-		const float minY = std::min({v0.y, v1.y, v2.y});
-		const float maxY = std::max({v0.y, v1.y, v2.y});
+		const float minX = std::min({ v0.x, v1.x, v2.x });
+		const float maxX = std::max({ v0.x, v1.x, v2.x });
+		const float minY = std::min({ v0.y, v1.y, v2.y });
+		const float maxY = std::max({ v0.y, v1.y, v2.y });
 
 		const int x0 = std::max(0, (int)std::floor(minX));
 		const int y0 = std::max(0, (int)std::floor(minY));
@@ -415,9 +423,9 @@ private:
 			return;
 		}
 
-		const Vector2 p0{v0.x, v0.y};
-		const Vector2 p1{v1.x, v1.y};
-		const Vector2 p2{v2.x, v2.y};
+		const Vector2 p0{ v0.x, v0.y };
+		const Vector2 p1{ v1.x, v1.y };
+		const Vector2 p2{ v2.x, v2.y };
 		const float area = math::edgeFunction(p0, p1, v2.x, v2.y);
 		if (std::abs(area) < 1e-6f)
 		{
@@ -476,12 +484,12 @@ private:
 
 						const int texX = std::min(texMaxX, std::max(0, (int)(u * (float)texMaxX + 0.5f)));
 						const int texY = std::min(texMaxY, std::max(0, (int)(v * (float)texMaxY + 0.5f)));
-						const RGBA &sample = bitmap[texX + texY * texWidth];
+						const RGBA& sample = bitmap[texX + texY * texWidth];
 
 						framebuffer[idx] = ((unsigned int)sample.a << 24) |
-										   ((unsigned int)sample.b << 16) |
-										   ((unsigned int)sample.g << 8) |
-										   (unsigned int)sample.r;
+							((unsigned int)sample.b << 16) |
+							((unsigned int)sample.g << 8) |
+							(unsigned int)sample.r;
 					}
 				}
 
@@ -497,25 +505,299 @@ private:
 	}
 
 	// TODO: Bilinear sampling
+	RGBA sampleTexture(const TGA* texture, float u, float v) {
+		if (texture == nullptr || texture->header() == nullptr || texture->pixelData() == nullptr) {
+			return RGBA{};
+		}
 
-	// TODO: Other shaders
+		u = std::max(0.0f, std::min(1.0f, u));
+		v = std::max(0.0f, std::min(1.0f, v));
+		v = 1.0f - v;
+
+		const int texWidth = (int)texture->header()->width;
+		const int texHeight = (int)texture->header()->height;
+		if (texWidth <= 0 || texHeight <= 0) {
+			return RGBA{};
+		}
+
+		const int tx = std::min(texWidth - 1, std::max(0, (int)(u * (float)(texWidth - 1))));
+		const int ty = std::min(texHeight - 1, std::max(0, (int)(v * (float)(texHeight - 1))));
+		return texture->pixelData()[tx + ty * texWidth];
+	}
+
+	void buildSimpleCubeMesh() {
+		simpleCubeMesh = new SimpleMesh();
+		auto& verts = simpleCubeMesh->verts;
+		verts.reserve(24);
+		verts = {
+			// Front face (z = -1)
+			{ -1.0f, -1.0f, -1.0f },
+			{ -1.0f,  1.0f, -1.0f },
+			{  1.0f,  1.0f, -1.0f },
+			{  1.0f, -1.0f, -1.0f },
+
+			// Back face (z = +1)
+			{  1.0f, -1.0f,  1.0f },
+			{  1.0f,  1.0f,  1.0f },
+			{ -1.0f,  1.0f,  1.0f },
+			{ -1.0f, -1.0f,  1.0f },
+
+			// Right face (x = +1)
+			{  1.0f, -1.0f, -1.0f },
+			{  1.0f,  1.0f, -1.0f },
+			{  1.0f,  1.0f,  1.0f },
+			{  1.0f, -1.0f,  1.0f },
+
+			// Left face (x = -1)
+			{ -1.0f, -1.0f,  1.0f },
+			{ -1.0f,  1.0f,  1.0f },
+			{ -1.0f,  1.0f, -1.0f },
+			{ -1.0f, -1.0f, -1.0f },
+
+			// Top face (y = +1)
+			{ -1.0f,  1.0f, -1.0f },
+			{ -1.0f,  1.0f,  1.0f },
+			{  1.0f,  1.0f,  1.0f },
+			{  1.0f,  1.0f, -1.0f },
+
+			// Bottom face (y = -1)
+			{ -1.0f, -1.0f,  1.0f },
+			{ -1.0f, -1.0f, -1.0f },
+			{  1.0f, -1.0f, -1.0f },
+			{  1.0f, -1.0f,  1.0f },
+		};
+
+		auto& indices = simpleCubeMesh->indices;
+		indices.reserve(24);
+		indices = {
+			// front
+			0, 2, 1, 0, 3, 2,
+			// back
+			4, 6, 5, 4, 7, 6,
+			// right
+			8, 10, 9, 8, 11, 10,
+			// left
+			12, 14, 13, 12, 15, 14,
+			// top
+			16, 18, 17, 16, 19, 18,
+			// bottom
+			20, 22, 21, 20, 23, 22
+		};
+
+		auto& uvs = simpleCubeMesh->uvs;
+		uvs.reserve(24);
+		uvs = {
+			// front
+			{ 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f }, { 1.0f, 0.0f },
+			// back
+			{ 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f }, { 1.0f, 0.0f },
+			// right
+			{ 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f }, { 1.0f, 0.0f },
+			// left
+			{ 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f }, { 1.0f, 0.0f },
+			// top
+			{ 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f }, { 1.0f, 0.0f },
+			// bottom
+			{ 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f }, { 1.0f, 0.0f },
+		};
+
+		simpleCubeMesh->tga = tgaTexture;
+
+		m_SimpleCubeClipZs.resize(simpleCubeMesh->verts.size());
+		m_SimpleCubeTransformVerts.resize(simpleCubeMesh->verts.size());
+		m_SimpleCubeInvWs.resize(simpleCubeMesh->verts.size());
+	}
+
+	void applyPerspectiveCorrect(Matrix4x4& modelMat, float deltaMs) {
+		// Transform vertices to clip space and store clip Z and inverse W 
+		// for perspective-correct interpolation
+		for (size_t i = 0; i < simpleCubeMesh->verts.size(); ++i) {
+			Vector4 v = { simpleCubeMesh->verts[i].x,
+				simpleCubeMesh->verts[i].y,
+				simpleCubeMesh->verts[i].z,
+				1.0f
+			};
+			v = modelMat * v;
+
+			Vector4 clip = projectionMatrix * (cameraMatrix * v);
+
+			float invW = (clip.w != 0.0f) ? (1.0f / clip.w) : 1.0f;
+			m_SimpleCubeInvWs[i] = invW;
+			// Store NDC depth for depth-test interpolation in screen space.
+			m_SimpleCubeClipZs[i] = clip.z * invW;
+
+			Vector4 ndc = { clip.x * invW, clip.y * invW, clip.z * invW, 1.0f };
+			ndc = viewportMatrix * ndc;
+
+			m_SimpleCubeTransformVerts[i] = { ndc.x, ndc.y, ndc.z };
+		}
+	}
+
+	void renderCubeMesh(float deltaMs) {
+		if (simpleCubeMesh == nullptr || simpleCubeMesh->tga == nullptr) {
+			return;
+		}
+
+		const float deltaSeconds = deltaMs * 0.001f;
+		if (deltaSeconds > 0.0f) {
+			m_SimpleCubeRotateRadian += deltaSeconds * 0.8f;
+			if (m_SimpleCubeRotateRadian > 360.0f)
+			{
+				m_SimpleCubeRotateRadian -= 360.0f;
+			}
+			else if (m_SimpleCubeRotateRadian < -360.0f)
+			{
+				m_SimpleCubeRotateRadian += 360.0f;
+			}
+		}
+
+		Matrix4x4 modelMat = Matrix4x4::identity;
+		modelMat.rotateY(m_SimpleCubeRotateRadian);
+
+		applyPerspectiveCorrect(modelMat, deltaMs);
+
+		for (size_t idx = 0; idx + 2 < simpleCubeMesh->indices.size(); idx += 3) {
+			uint32_t i0 = simpleCubeMesh->indices[idx];
+			uint32_t i1 = simpleCubeMesh->indices[idx + 1];
+			uint32_t i2 = simpleCubeMesh->indices[idx + 2];
+			const Vector3& v0 = m_SimpleCubeTransformVerts[i0];
+			const Vector3& v1 = m_SimpleCubeTransformVerts[i1];
+			const Vector3& v2 = m_SimpleCubeTransformVerts[i2];
+
+			// For texture mapping, use fillTriangleTexture instead of fillTriangleBarycentric
+			//fillTriangleBarycentric(v0, v1, v2, 0xFF33AAFF);
+
+			//fillTriangleTexture(v0, v1, v2, simpleCubeMesh->tga->pixelData());
+
+			const Vector2& uv0 = simpleCubeMesh->uvs[i0];
+			const Vector2& uv1 = simpleCubeMesh->uvs[i1];
+			const Vector2& uv2 = simpleCubeMesh->uvs[i2];
+			const float invW0 = m_SimpleCubeInvWs[i0];
+			const float invW1 = m_SimpleCubeInvWs[i1];
+			const float invW2 = m_SimpleCubeInvWs[i2];
+			const float clipZ0 = m_SimpleCubeClipZs[i0];
+			const float clipZ1 = m_SimpleCubeClipZs[i1];
+			const float clipZ2 = m_SimpleCubeClipZs[i2];
+
+			// #3
+			drawTexturedTriangle(v0, v1, v2, uv0, uv1, uv2,
+				invW0, invW1, invW2, clipZ0, clipZ1, clipZ2,
+				simpleCubeMesh->tga, zbuffer);
+
+			// [Optional] Draw wireframe edges
+			const int whiteColor = 0xFFFFFFFF;
+			drawLine({ v0.x, v0.y }, { v1.x, v1.y }, whiteColor);
+			drawLine({ v1.x, v1.y }, { v2.x, v2.y }, whiteColor);
+			drawLine({ v0.x, v0.y }, { v2.x, v2.y }, whiteColor);
+		}
+	}
+
+	void drawTexturedTriangle(const Vector3& v0, const Vector3& v1, const Vector3& v2,
+		const Vector2& uv0, const Vector2& uv1, const Vector2& uv2,
+		float invW0, float invW1, float invW2,
+		float clipZ0, float clipZ1, float clipZ2,
+		const TGA* texture, float* zbuffer)
+	{
+		if (texture == nullptr || zbuffer == nullptr) {
+			return;
+		}
+
+		Vector2 a = { v0.x, v0.y };
+		Vector2 b = { v1.x, v1.y };
+		Vector2 c = { v2.x, v2.y };
+
+		float minX = std::min({ a.x, b.x, c.x });
+		float maxX = std::max({ a.x, b.x, c.x });
+		float minY = std::min({ a.y, b.y, c.y });
+		float maxY = std::max({ a.y, b.y, c.y });
+
+		int x0 = std::max(0, (int)std::floor(minX));
+		int y0 = std::max(0, (int)std::floor(minY));
+		int x1 = std::min(width - 1, (int)std::ceil(maxX));
+		int y1 = std::min(height - 1, (int)std::ceil(maxY));
+		if (x0 > x1 || y0 > y1) {
+			return;
+		}
+
+		// Back-face culling (treat CCW as front-facing)
+		const float area = math::edgeFunction(a, b, c.x, c.y);
+		if (area <= 1e-6f)
+		{
+			return;
+		}
+		const float invArea = 1.0f / area;
+
+		for (int y = y0; y <= y1; ++y) {
+			for (int x = x0; x <= x1; ++x) {
+				float px = x + 0.5f;
+				float py = y + 0.5f;
+				float w0 = math::edgeFunction(b, c, px, py);
+				float w1 = math::edgeFunction(c, a, px, py);
+				float w2 = math::edgeFunction(a, b, px, py);
+
+				// Back-face culling (treat CCW as front-facing)
+				if (w0 < 0.0f || w1 < 0.0f || w2 < 0.0f)
+				{
+					continue;
+				}
+
+				const float b0 = w0 * invArea;
+				const float b1 = w1 * invArea;
+				const float b2 = w2 * invArea;
+
+				const float denom = (b0 * invW0) + (b1 * invW1) + (b2 * invW2);
+				if (std::abs(denom) <= 1e-8f) {
+					continue;
+				}
+				const float invDenom = 1.0f / denom;
+
+				const float u = (uv0.x * invW0 * b0 + uv1.x * invW1 * b1 + uv2.x * invW2 * b2) * invDenom;
+				const float v = (uv0.y * invW0 * b0 + uv1.y * invW1 * b1 + uv2.y * invW2 * b2) * invDenom;
+				// Depth is already in NDC at vertices; interpolate linearly in screen space.
+				const float z = (clipZ0 * b0 + clipZ1 * b1 + clipZ2 * b2);
+				if (z < 0.0f || z > 1.0f) {
+					continue;
+				}
+
+				int depthIndex = x + y * width;
+				if (z >= zbuffer[depthIndex]) {
+					continue;
+				}
+				RGBA color = sampleTexture(texture, u, v);
+
+				if ((static_cast<uint32_t>(color) >> 24) == 0) {
+					continue;
+				}
+
+				zbuffer[depthIndex] = z;
+				drawPoint(x, y, (int)color.value);
+			}
+		}
+	}
+
+
+	// TODO: 8. Other shaders; Flat, Gouraud, Phong, Blinn-Phong, etc.
+
+	// TODO: 9. OBJ mesh loading and rendering
+
+	// TODO: 10. Camera movement and interaction
 
 private:
-	int width{0};
-	int height{0};
-	unsigned int *framebuffer{nullptr};
-	WorldCamera *camera{nullptr};
+	int width{ 0 };
+	int height{ 0 };
+	unsigned int* framebuffer{ nullptr };
+	WorldCamera* camera{ nullptr };
 
 	Matrix4x4 viewportMatrix, projectionMatrix, cameraMatrix;
 
-	SDL_Renderer *renderer{nullptr};
-	SDL_Texture *mainTexture{nullptr};
-	TextureLoader *textureLoader{nullptr};
-	float *zbuffer{nullptr};
+	SDL_Renderer* renderer{ nullptr };
+	SDL_Texture* mainTexture{ nullptr };
+	TextureLoader* textureLoader{ nullptr };
+	float* zbuffer{ nullptr };
 
-	const float kZNear{0.1f}, kZFar{10.0f};
+	const float kZNear{ 0.1f }, kZFar{ 10.0f };
 
-	float rotateRadian{0.0f};
+	float rotateRadian{ 0.0f };
 
 	// Start Draw Tri
 	Vector3 triVerts[3];
@@ -526,6 +808,16 @@ private:
 	// End Draw Cube
 
 	// Start Draw Textured Tri
-	TGA *tgaTexture{nullptr};
+	TGA* tgaTexture{ nullptr };
 	// End Draw Textured Tri
+
+	// Start Render Mesh
+	SimpleMesh* simpleCubeMesh{ nullptr };
+	std::vector<Vector3> m_SimpleCubeTransformVerts;
+	std::vector<float> m_SimpleCubeClipZs;
+	std::vector<float> m_SimpleCubeInvWs;
+	float m_SimpleCubeRotateRadian{ 0.0f };
+	// End Render Mesh
+
+	SimpleMesh* m_BunnyMesh{ nullptr };
 };
