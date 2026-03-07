@@ -34,9 +34,11 @@ cmake -S . -B build -G Xcode
 cmake --build build --config Debug
 ```
 
+Note:
+- The `resources` directory is copied next to the built executable, so texture files are found even when Xcode uses a DerivedData output path.
+
 Run:
 
 ```bash
 ./build/Debug/cpu-rasterizer
 ```
-

@@ -33,12 +33,12 @@ bool Vector2::operator==(const Vector2& other) const {
   return (x == other.x) && (y == other.y);
 }
 
-float Vector2::magnitude() const {
+float Vector2::Magnitude() const {
   return sqrtf(x * x + y * y);
 }
 
-Vector2 Vector2::normalized() const {
-  float mag = magnitude();
+Vector2 Vector2::Normalized() const {
+  float mag = Magnitude();
   return { x / mag, y / mag };
 }
 
@@ -83,13 +83,13 @@ bool Vector3::operator==(const Vector3& other) const {
   return (this->x == other.x && this->y == other.y && this->z == other.z);
 }
 
-Vector3 Vector3::normalize() const {
+Vector3 Vector3::Normalize() const {
   const float mag = (float)std::sqrt(this->x * this->x + this->y * this->y +
                                      this->z * this->z);
   return (*this) / mag;
 }
 
-std::string Vector3::toString() const {
+std::string Vector3::ToString() const {
   char buf[64];
   snprintf(buf, 64, "(%4.2f, %4.2f, %4.2f)", this->x, this->y, this->z);
   return std::string(buf);
@@ -97,15 +97,15 @@ std::string Vector3::toString() const {
 
 namespace math {
 
-Vector3 subtract(const Vector3& v1, const Vector3& v2) {
+Vector3 Subtract(const Vector3& v1, const Vector3& v2) {
   return v1 - v2;
 }
 
-float dotProduct(const Vector3& v1, const Vector3& v2) {
+float DotProduct(const Vector3& v1, const Vector3& v2) {
   return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
 }
 
-Vector3 crossProduct(const Vector3& v1, const Vector3& v2) {
+Vector3 CrossProduct(const Vector3& v1, const Vector3& v2) {
   return {
     v1.y * v2.z - v1.z * v2.y,
     v1.z * v2.x - v1.x * v2.z,
@@ -123,7 +123,7 @@ Vector4::Vector4()
 Vector4::Vector4(float x, float y, float z, float w)
 : x(x), y(y), z(z), w(w) {}
 
-void Vector4::perspectiveDivide() {
+void Vector4::PerspectiveDivide() {
   const float rhw = 1 / w;
   this->x = x * rhw;
   this->y = y * rhw;
@@ -285,13 +285,13 @@ Matrix4x4 Matrix4x4::operator*(const Matrix4x4& other) const {
   };
 }
 
-void Matrix4x4::translate(float x, float y, float z) {
+void Matrix4x4::Translate(float x, float y, float z) {
   this->m41 += x;
   this->m42 += y;
   this->m43 += z;
 }
 
-Vector3 Matrix4x4::transform(const Vector3& v) {
+Vector3 Matrix4x4::Transform(const Vector3& v) {
   return {
     v.x * this->m11 + v.y * this->m21 + v.z * this->m31 + this->m41,
     v.x * this->m12 + v.y * this->m22 + v.z * this->m32 + this->m42,
@@ -299,7 +299,7 @@ Vector3 Matrix4x4::transform(const Vector3& v) {
   };
 }
 
-Vector4 Matrix4x4::transform4(const Vector3& v) {
+Vector4 Matrix4x4::Transform4(const Vector3& v) {
   return {
     v.x * this->m11 + v.y * this->m21 + v.z * this->m31 + this->m41,
     v.x * this->m12 + v.y * this->m22 + v.z * this->m32 + this->m42,
@@ -308,11 +308,11 @@ Vector4 Matrix4x4::transform4(const Vector3& v) {
   };
 }
 
-void Matrix4x4::rotate(float x, float y, float z) {
+void Matrix4x4::Rotate(float x, float y, float z) {
   const float DEG2RAD = acos(-1.0f) / 180;
 }
 
-void Matrix4x4::rotateX(float deg) {
+void Matrix4x4::RotateX(float deg) {
   static const float DEG2RAD = acos(-1.0f) / 180;
   float cs = (float)cos(deg * DEG2RAD);
   float ss = (float)sin(deg * DEG2RAD);
@@ -323,7 +323,7 @@ void Matrix4x4::rotateX(float deg) {
   this->m33 = cs;
 }
 
-void Matrix4x4::rotateY(float deg) {
+void Matrix4x4::RotateY(float deg) {
   static const float DEG2RAD = acos(-1.0f) / 180;
   float cs = (float)cos(deg * DEG2RAD);
   float ss = (float)sin(deg * DEG2RAD);
@@ -334,7 +334,7 @@ void Matrix4x4::rotateY(float deg) {
   this->m33 = cs;
 }
 
-void Matrix4x4::rotateZ(float deg) {
+void Matrix4x4::RotateZ(float deg) {
   static const float DEG2RAD = acos(-1.0f) / 180;
   float cs = (float)cos(deg * DEG2RAD);
   float ss = (float)sin(deg * DEG2RAD);
@@ -345,7 +345,7 @@ void Matrix4x4::rotateZ(float deg) {
   this->m22 = cs;
 }
 
-void Matrix4x4::print() const {
+void Matrix4x4::Print() const {
   static const char* log = R"(
     [ %4.2f %4.2f %4.2f %4.2f ]
     [ %4.2f %4.2f %4.2f %4.2f ]
@@ -361,19 +361,19 @@ void Matrix4x4::print() const {
 
 namespace math {
 
-void setupCameraMatrix(Matrix4x4& model, const Vector3& eye, const Vector3& at, const Vector3& up) {
+void SetupCameraMatrix(Matrix4x4& model, const Vector3& eye, const Vector3& at, const Vector3& up) {
   // https://arienbv.org/blog/2017/07/30/breakdown-of-the-lookAt-function-in-OpenGL/
   // eye는 카메라의 위치, at은 카메라가 바라보고 있는 방향, up은 카메라 기준 위 방향
   
   // Left-handed 좌표계: Forward는 +Z 방향.
 
-  //Vector3 Vector3::normalize() const {
+  //Vector3 Vector3::Normalize() const {
   //  const float mag = (float)std::sqrt(this->x * this->x + this->y * this->y +
   //    this->z * this->z);
   //  return (*this) / mag;
   //}
 
-  Vector3 f = (at - eye).normalize();
+  Vector3 f = (at - eye).Normalize();
   Vector3 zaxis = f;
 
   // 두 개의 다른 벡터 축 계산
@@ -382,17 +382,17 @@ void setupCameraMatrix(Matrix4x4& model, const Vector3& eye, const Vector3& at, 
   //  1. Up과 Forward를 외적하여 Right(x축) 구함.
   //     Up 벡터는 유닛 벡터가 아닐 수 있으므로 정규화 필요.
 
-  //Vector3 crossProduct(const Vector3 & v1, const Vector3 & v2) {
+  //Vector3 CrossProduct(const Vector3 & v1, const Vector3 & v2) {
   //  return {
   //    v1.y * v2.z - v1.z * v2.y,
   //    v1.z * v2.x - v1.x * v2.z,
   //    v1.x * v2.y - v1.y * v2.z
   //  };
   //}
-  Vector3 xaxis = (math::crossProduct(up, zaxis)).normalize();
+  Vector3 xaxis = (math::CrossProduct(up, zaxis)).Normalize();
   
   //  2. Forward와 Right로 Up(y축) 재계산
-  Vector3 yaxis = math::crossProduct(zaxis, xaxis);
+  Vector3 yaxis = math::CrossProduct(zaxis, xaxis);
 
   /*
   +-----------------+
@@ -408,20 +408,20 @@ void setupCameraMatrix(Matrix4x4& model, const Vector3& eye, const Vector3& at, 
   // 이들을 분리하여 변환 행렬의 역행렬을 구하기 쉽도록 함
   // X, Y, Z, 순으로 채우고 // W 쪽 채우기
 
-  //float dotProduct(const Vector3 & v1, const Vector3 & v2) {
+  //float DotProduct(const Vector3 & v1, const Vector3 & v2) {
   //  return v1.x * v2.x + v1.y * v2.y + v1.z + v2.z;
   //}
 
   model.m11 = xaxis.x;  model.m12 = yaxis.x;  model.m13 = zaxis.x;  model.m14 = 0.0f;
   model.m21 = xaxis.y;  model.m22 = yaxis.y;  model.m23 = zaxis.y;  model.m24 = 0.0f;
   model.m31 = xaxis.z;  model.m32 = yaxis.z;  model.m33 = zaxis.z;  model.m34 = 0.0f;
-  model.m41 = -math::dotProduct(xaxis, eye);
-  model.m42 = -math::dotProduct(yaxis, eye);
-  model.m43 = -math::dotProduct(zaxis, eye);
+  model.m41 = -math::DotProduct(xaxis, eye);
+  model.m42 = -math::DotProduct(yaxis, eye);
+  model.m43 = -math::DotProduct(zaxis, eye);
   model.m44 = 1.0f;
 }
 
-void setupPerspectiveProjectionMatrix(Matrix4x4& out, float fovY, float aspect, float near, float far) {
+void SetupPerspectiveProjectionMatrix(Matrix4x4& out, float fovY, float aspect, float near, float far) {
   // 원근 투영 (Left-handed)
   // https://www.songho.ca/opengl/gl_projectionmatrix.html
 
@@ -436,7 +436,7 @@ void setupPerspectiveProjectionMatrix(Matrix4x4& out, float fovY, float aspect, 
   out.m44 = 0.0f;
 }
 
-void setupViewportMatrix(Matrix4x4& out, float x, float y, float w, float h, float near, float far) {
+void SetupViewportMatrix(Matrix4x4& out, float x, float y, float w, float h, float near, float far) {
   /*
   * https://www.songho.ca/opengl/gl_viewport.html
   +-----------------+ +----------------------+
@@ -459,11 +459,11 @@ void setupViewportMatrix(Matrix4x4& out, float x, float y, float w, float h, flo
   out.m44 = 1.0f;
 }
 
-uint32_t lerpColor(uint32_t from, uint32_t to, float t) {
+uint32_t LerpColor(uint32_t from, uint32_t to, float t) {
   return (uint32_t)(from + t * (to - from));
 }
 
-float edgeFunction(const Vector2& a, const Vector2& b, float x, float y) {
+float EdgeFunction(const Vector2& a, const Vector2& b, float x, float y) {
   return (x - a.x) * (b.y - a.y) - (y - a.y) * (b.x - a.x);
 }
 

@@ -26,10 +26,10 @@ struct Vector2 {
   bool operator==(const Vector2& other) const;
 
   /// @brief 벡터의 크기 계산
-  float magnitude() const;
+  float Magnitude() const;
 
   /// @brief 벡터 노멀라이즈 (정규화)
-  Vector2 normalized() const;
+  Vector2 Normalized() const;
 };
 
 struct Vector3 {
@@ -52,9 +52,9 @@ struct Vector3 {
 
   /// @brief 각 값을 정규화
   /// @return 정규화된 벡터 반환
-  Vector3 normalize() const;
+  Vector3 Normalize() const;
 
-  std::string toString() const;
+  std::string ToString() const;
 };
 
 namespace math {
@@ -63,7 +63,7 @@ namespace math {
 /// @param v1 첫번째 벡터
 /// @param v2 두번째 벡터
 /// @return 두 벡터의 뺄셈
-Vector3 subtract(const Vector3& v1, const Vector3& v2);
+Vector3 Subtract(const Vector3& v1, const Vector3& v2);
 
 /// @brief 두 벡터의 내적을 반환. 스칼라 값 출력. v1 · v2 = |v1| |v2| cosθ
 /// https://en.wikipedia.org/wiki/Dot_product 참고.
@@ -73,14 +73,14 @@ Vector3 subtract(const Vector3& v1, const Vector3& v2);
 /// @param v1 첫번째 벡터
 /// @param v2 두번째 벡터
 /// @return 두 벡터의 내적
-float dotProduct(const Vector3& v1, const Vector3& v2);
+float DotProduct(const Vector3& v1, const Vector3& v2);
 
 /// @brief 두 벡터의 외적을 반환. 벡터 출력. v1 X v2 = |v1| |v2| sinθ
 /// https://en.wikipedia.org/wiki/Cross_product 참고
 /// @param v1 첫번째 벡터
 /// @param v2 두번째 벡터
 /// @return 두 벡터의 외적
-Vector3 crossProduct(const Vector3& v1, const Vector3& v2);
+Vector3 CrossProduct(const Vector3& v1, const Vector3& v2);
 
 }
 
@@ -92,7 +92,7 @@ struct Vector4 {
 
   Vector4();
   Vector4(float, float, float, float);
-  void perspectiveDivide();
+  void PerspectiveDivide();
 };
 
 /*
@@ -136,28 +136,28 @@ struct Matrix4x4 {
   static Matrix4x4 identity;
 
   /// @brief 주어진 좌표로 이동하도록 하는 행렬 수정
-  void translate(float x, float y, float z);
+  void Translate(float x, float y, float z);
   
   /// @brief 주어진 좌표로 변환한 벡터를 구함
   /// @param v 3차원 좌표
   /// @return 3차원 벡터
-  Vector3 transform(const Vector3& v);
+  Vector3 Transform(const Vector3& v);
   
   /// @brief 주어진 좌표로 변환한 벡터를 구함
   /// @param v 4차원 좌표
   /// @return 4차원 벡터
-  Vector4 transform4(const Vector3& v);
+  Vector4 Transform4(const Vector3& v);
 
   /// @brief 주어진 각도로 행렬 회전
-  void rotate(float x, float y, float z);
+  void Rotate(float x, float y, float z);
 
-  void rotateX(float deg);
+  void RotateX(float deg);
 
-  void rotateY(float deg);
+  void RotateY(float deg);
 
-  void rotateZ(float deg);
+  void RotateZ(float deg);
 
-  void print() const;
+  void Print() const;
 };
 
 namespace math {
@@ -165,20 +165,20 @@ namespace math {
 /**
  * @brief 현재 카메라가 바라보고 있는 방향의 벡터를 반환
  */
-void setupCameraMatrix(Matrix4x4& out, const Vector3& eye, const Vector3& at, const Vector3& up);
+void SetupCameraMatrix(Matrix4x4& out, const Vector3& eye, const Vector3& at, const Vector3& up);
 
 /**
  * @brief 원근 투영 프러스텀 매트릭스 반환
  */
-void setupPerspectiveProjectionMatrix(Matrix4x4& out, float fovY, float aspect, float near, float far);
+void SetupPerspectiveProjectionMatrix(Matrix4x4& out, float fovY, float aspect, float near, float far);
 
 /**
  * @brief 뷰포트 행렬 구성
  * near, far는 기본값 각각 0, 1 사용
  */
-void setupViewportMatrix(Matrix4x4& out, float x, float y, float w, float h, float near, float far);
+void SetupViewportMatrix(Matrix4x4& out, float x, float y, float w, float h, float near, float far);
 
-uint32_t lerpColor(uint32_t from, uint32_t to, float t);
+uint32_t LerpColor(uint32_t from, uint32_t to, float t);
 
 /**
  * 두 벡터로 이루어진 면과 주어진 정점 사이를 수학적으로 계산
@@ -192,6 +192,6 @@ uint32_t lerpColor(uint32_t from, uint32_t to, float t);
  * edge < 0  : 점P는 선분 a->b 오른쪽에 위치
  * edge == 0 : 점P는 선분에 위치
  */
-float edgeFunction(const Vector2& a, const Vector2& b, float x, float y);
+float EdgeFunction(const Vector2& a, const Vector2& b, float x, float y);
 
 } // namespace math

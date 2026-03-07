@@ -26,6 +26,10 @@ add_executable(${PROJECT_NAME}
     ${SORUCES_FILES}
 )
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    CPURASTERIZER_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
 # Settings for platform
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     # Windows specific settings (Visual Studio)
@@ -161,4 +165,11 @@ elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     )
 endif()
 
-# SDL2 DLL 복사 (handled per-platform above)
+# Keep resources available beside the built executable (including Xcode/DerivedData paths).
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${PROJECT_NAME}>/resources"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/resources"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/resources")
+
+# SDL2 DLL copy is handled in the Windows block above.
