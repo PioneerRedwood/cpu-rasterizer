@@ -3,6 +3,7 @@
 #include <SDL.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 
 #include "Mesh.hpp"
@@ -521,7 +522,6 @@ class Renderer {
     }
   }
 
-  // TODO: Bilinear sampling
   Color SampleTexture(const TGA* texture, float u, float v) {
     if (texture == nullptr || texture->Header() == nullptr ||
         texture->PixelData() == nullptr) {
@@ -543,6 +543,55 @@ class Renderer {
     const int ty =
         std::min(texHeight - 1, std::max(0, (int)(v * (float)(texHeight - 1))));
     return texture->PixelData()[tx + ty * texWidth];
+  }
+
+  Color BilinearSampleTexture(const TGA* texture, float u, float v) {
+    if (texture == nullptr || texture->Header() == nullptr ||
+        texture->PixelData() == nullptr) {
+      return Color{};
+    }
+
+    u = std::max(0.0f, std::min(1.0f, u));
+    v = std::max(0.0f, std::min(1.0f, v));
+    v = 1.0f - v;
+
+    const int w = (int)texture->Header()->width;
+    const int h = (int)texture->Header()->height;
+    if (w <= 0 || h <= 0) {
+      return Color{};
+    }
+
+    const Color* pixel = texture->PixelData();
+
+    const float x = u * (float)(w - 1);
+    const float y = v * (float)(h - 1);
+    const int x0 = std::max(0, std::min(w - 1, (int)std::floor(x)));
+    const int y0 = std::max(0, std::min(h - 1, (int)std::floor(y)));
+    const int x1 = std::min(w - 1, x0 + 1);
+    const int y1 = std::min(h - 1, y0 + 1);
+    const float fx = x - (float)x0;
+    const float fy = y - (float)y0;
+
+    const Color& c00 = pixel[x0 + y0 * w];  // top-left
+    const Color& c10 = pixel[x1 + y0 * w];  // top-right
+    const Color& c01 = pixel[x0 + y1 * w];  // bottom-left
+    const Color& c11 = pixel[x1 + y1 * w];  // bottom-right
+
+    auto blendChannel = [fx, fy](uint8_t cc00, uint8_t cc10, uint8_t cc01,
+                                 uint8_t cc11) -> uint8_t {
+      const float top = cc00 + (cc10 - cc00) * fx;
+      const float bottom = cc01 + (cc11 - cc01) * fx;
+      float value = top + (bottom - top) * fy;
+      value = std::max(0.0f, std::min(255.0f, value));
+      return static_cast<uint8_t>(value + 0.5f);
+    };
+
+    Color result{};
+    result.r = blendChannel(c00.r, c10.r, c01.r, c11.r);
+    result.g = blendChannel(c00.g, c10.g, c01.g, c11.g);
+    result.b = blendChannel(c00.b, c10.b, c01.b, c11.b);
+    result.a = blendChannel(c00.a, c10.a, c01.a, c11.a);
+    return result;
   }
 
   void BuildSimpleCubeMesh() {
@@ -671,18 +720,16 @@ class Renderer {
       return;
     }
 
-    const float deltaSeconds = deltaMs * 0.001f;
-    if (deltaSeconds > 0.0f) {
-      m_SimpleCubeRotateRadian += deltaSeconds * 0.8f;
-      if (m_SimpleCubeRotateRadian > 360.0f) {
-        m_SimpleCubeRotateRadian -= 360.0f;
-      } else if (m_SimpleCubeRotateRadian < -360.0f) {
-        m_SimpleCubeRotateRadian += 360.0f;
-      }
+    m_SimpleCubeRotateRadian += 2.8f;
+    if (m_SimpleCubeRotateRadian > 360.0f) {
+      m_SimpleCubeRotateRadian -= 360.0f;
+    } else if (m_SimpleCubeRotateRadian < -360.0f) {
+      m_SimpleCubeRotateRadian += 360.0f;
     }
 
     Matrix4x4 modelMat = Matrix4x4::identity;
-    modelMat.RotateY(m_SimpleCubeRotateRadian);
+    modelMat.Rotate(m_SimpleCubeRotateRadian, m_SimpleCubeRotateRadian,
+                    m_SimpleCubeRotateRadian);
 
     ApplyPerspectiveCorrect(modelMat, deltaMs);
 
@@ -797,7 +844,7 @@ class Renderer {
         if (z >= m_ZBuffer[depthIndex]) {
           continue;
         }
-        Color color = SampleTexture(texture, u, v);
+        Color color = BilinearSampleTexture(texture, u, v);
 
         if ((static_cast<uint32_t>(color) >> 24) == 0) {
           continue;

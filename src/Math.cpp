@@ -309,7 +309,17 @@ Vector4 Matrix4x4::Transform4(const Vector3& v) {
 }
 
 void Matrix4x4::Rotate(float x, float y, float z) {
-  const float DEG2RAD = acos(-1.0f) / 180;
+  Matrix4x4 rotateX = Matrix4x4::identity;
+  Matrix4x4 rotateY = Matrix4x4::identity;
+  Matrix4x4 rotateZ = Matrix4x4::identity;
+
+  rotateX.RotateX(x);
+  rotateY.RotateY(y);
+  rotateZ.RotateZ(z);
+
+  // Row-vector convention: v' = ((v * Rx) * Ry) * Rz
+  // so combined matrix is Rx * Ry * Rz.
+  *this = rotateX * rotateY * rotateZ;
 }
 
 void Matrix4x4::RotateX(float deg) {
