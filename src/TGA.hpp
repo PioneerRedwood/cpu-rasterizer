@@ -11,8 +11,9 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <vector>
 
-#include "RGBA.hpp"
+#include "Color.hpp"
 
 /**
  * TGA (Truevision Graphics Adapter), TARGA (Truevision Advanced Raster Graphics
@@ -74,49 +75,35 @@ class TGA {
 
   const TGAHeader* Header() const { return (TGAHeader const*)&m_Header; }
 
-  const RGBA* PixelData() const { return m_PixelData; }
+  const Color* PixelData() const { return m_PixelData; }
 
   SDL_Texture const* SDLTexture() const { return m_Texture; }
 
-  bool ReadFromFile(const char* filepath) {
+  bool ReadFromFile(const char* filepath, Uint32 supportedPixelFormat) {
     FILE* fp = fopen(filepath, "rb");
     if (fp == nullptr) {
       return false;
     }
 
-    const size_t read = fread(&m_Header, sizeof(TGAHeader), 1, fp);
+    size_t read = fread(&m_Header, sizeof(TGAHeader), 1, fp);
     if (read != 1) {
       fclose(fp);
       return false;
     }
-
-    if (m_Header.color_map_type != 0) {
+      
+    if (m_Header.image_type != 2) {
       fclose(fp);
       return false;
     }
 
-    const int bytesPerPixel = m_Header.pixel_depth / 8;
+    const int bytesPerPixel = static_cast<int>(m_Header.pixel_depth) / 8;
     if (bytesPerPixel != 3 && bytesPerPixel != 4) {
       fclose(fp);
       return false;
     }
 
-    // 2: uncompressed true-color, 10: RLE true-color.
-    if (m_Header.image_type != 2 && m_Header.image_type != 10) {
-      fclose(fp);
-      return false;
-    }
-
-    if (m_Header.id_length > 0) {
-      if (fseek(fp, m_Header.id_length, SEEK_CUR) != 0) {
-        fclose(fp);
-        return false;
-      }
-    }
-
-    const uint32_t width = m_Header.width;
-    const uint32_t height = m_Header.height;
-    const uint32_t pixelCount = width * height;
+    const size_t pixelCount =
+        static_cast<size_t>(m_Header.width) * static_cast<size_t>(m_Header.height);
     if (pixelCount == 0) {
       fclose(fp);
       return false;
@@ -126,81 +113,47 @@ class TGA {
       delete[] m_PixelData;
       m_PixelData = nullptr;
     }
-    m_PixelData = new RGBA[pixelCount];
+    m_PixelData = new Color[pixelCount];
 
-    auto readPixel = [fp, bytesPerPixel](RGBA& out) -> bool {
-      uint8_t px[4] = {0, 0, 0, 255};
-      if (fread(px, bytesPerPixel, 1, fp) != 1) {
+    if (m_Header.id_length > 0) {
+      if (fseek(fp, m_Header.id_length, SEEK_CUR) != 0) {
+        fclose(fp);
         return false;
       }
+    }
 
-      // Keep TGA byte order in memory (B,G,R,A) for SDL_PIXELFORMAT_BGRA32
-      // upload.
-      out.r = px[0];
-      out.g = px[1];
-      out.b = px[2];
-      out.a = (bytesPerPixel == 4) ? px[3] : 255;
-      return true;
-    };
+    const size_t imageSize = pixelCount * static_cast<size_t>(bytesPerPixel);
+    std::vector<uint8_t> rawPixels(imageSize);
+    read = fread(rawPixels.data(), imageSize, 1, fp);
+    if (read != 1) {
+      fclose(fp);
+      return false;
+    }
 
     const bool topLeftOrigin = (m_Header.image_descriptor & 0x20) != 0;
-    auto writePixel = [this, width, height, topLeftOrigin](uint32_t srcIndex,
-                                                           const RGBA& value) {
-      uint32_t dstIndex = srcIndex;
-      if (!topLeftOrigin) {
-        const uint32_t x = srcIndex % width;
-        const uint32_t y = srcIndex / width;
-        dstIndex = x + (height - 1 - y) * width;
-      }
-      m_PixelData[dstIndex] = value;
-    };
+    const bool targetHasAlpha = SDL_ISPIXELFORMAT_ALPHA(supportedPixelFormat);
 
-    if (m_Header.image_type == 2) {
-      for (uint32_t i = 0; i < pixelCount; ++i) {
-        RGBA pixel{};
-        if (!readPixel(pixel)) {
-          fclose(fp);
-          return false;
-        }
-        writePixel(i, pixel);
-      }
-    } else {
-      uint32_t i = 0;
-      while (i < pixelCount) {
-        uint8_t packetHeader = 0;
-        if (fread(&packetHeader, 1, 1, fp) != 1) {
-          fclose(fp);
-          return false;
-        }
+    for (uint16_t y = 0; y < m_Header.height; ++y) {
+      for (uint16_t x = 0; x < m_Header.width; ++x) {
+        const size_t srcIndex =
+            (static_cast<size_t>(y) * m_Header.width + x) * bytesPerPixel;
 
-        const uint32_t count = (packetHeader & 0x7F) + 1;
-        if (i + count > pixelCount) {
-          fclose(fp);
-          return false;
-        }
+        const uint8_t sourceB = rawPixels[srcIndex + 0];
+        const uint8_t sourceG = rawPixels[srcIndex + 1];
+        const uint8_t sourceR = rawPixels[srcIndex + 2];
+        const uint8_t sourceA = (bytesPerPixel == 4 && targetHasAlpha)
+                                    ? rawPixels[srcIndex + 3]
+                                    : 255;
 
-        if ((packetHeader & 0x80) != 0) {
-          RGBA pixel{};
-          if (!readPixel(pixel)) {
-            fclose(fp);
-            return false;
-          }
+        const uint16_t dstY = topLeftOrigin ? y : static_cast<uint16_t>(m_Header.height - 1 - y);
+        const size_t dstIndex = static_cast<size_t>(dstY) * m_Header.width + x;
+        Color& dstColor = m_PixelData[dstIndex];
 
-          for (uint32_t k = 0; k < count; ++k) {
-            writePixel(i + k, pixel);
-          }
-        } else {
-          for (uint32_t k = 0; k < count; ++k) {
-            RGBA pixel{};
-            if (!readPixel(pixel)) {
-              fclose(fp);
-              return false;
-            }
-            writePixel(i + k, pixel);
-          }
-        }
-
-        i += count;
+        // TGA source is BGR(A); convert to logical RGBA for the sampler.
+        dstColor.r = sourceR;
+        dstColor.g = sourceG;
+        dstColor.b = sourceB;
+        dstColor.a = sourceA;
       }
     }
 
@@ -208,11 +161,22 @@ class TGA {
     return true;
   }
 
-  bool CreateTexture(SDL_Renderer* renderer) {
-    m_Texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGRA32,
-                                  SDL_TEXTUREACCESS_STATIC, m_Header.width,
-                                  m_Header.height);
-    const int pitch = m_Header.width * (int)sizeof(RGBA);
+  bool CreateTexture(SDL_Renderer* renderer, Uint32 format) {
+    if (renderer == nullptr) {
+      return false;
+    }
+
+    if (m_Texture != nullptr) {
+      SDL_DestroyTexture(m_Texture);
+      m_Texture = nullptr;
+    }
+
+    m_Texture = SDL_CreateTexture(renderer, format, SDL_TEXTUREACCESS_STATIC,
+                                  m_Header.width, m_Header.height);
+    if (m_Texture == nullptr) {
+      return false;
+    }
+    const int pitch = m_Header.width * (int)sizeof(Color);
     if (SDL_UpdateTexture(m_Texture, nullptr, m_PixelData, pitch) != 0) {
       SDL_assert(false);
       return false;
@@ -226,6 +190,6 @@ class TGA {
 
  private:
   TGAHeader m_Header{};
-  RGBA* m_PixelData = nullptr;
+  Color* m_PixelData = nullptr;
   SDL_Texture* m_Texture = nullptr;
 };

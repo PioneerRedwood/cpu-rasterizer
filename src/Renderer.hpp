@@ -3,6 +3,7 @@
 #include <SDL.h>
 
 #include <algorithm>
+#include <cstdint>
 
 #include "Mesh.hpp"
 #include "TextureLoader.hpp"
@@ -12,15 +13,60 @@ class Renderer {
  public:
   Renderer(SDL_Window* window, int width, int height)
       : m_Width(width), m_Height(height) {
-    m_Framebuffer = new unsigned int[m_Width * m_Height];
+    m_Framebuffer = new uint32_t[m_Width * m_Height];
     m_Camera = new WorldCamera();
     m_ZBuffer = new float[m_Width * m_Height];
     std::fill(m_ZBuffer, m_ZBuffer + m_Width * m_Height, 1.0f);
 
     m_Renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    if (m_Renderer == nullptr) {
+      LogF("SDL_CreateRenderer failed: %s", SDL_GetError());
+      SDL_assert(false);
+      return;
+    }
+
+    SDL_RendererInfo info{};
+    if (SDL_GetRendererInfo(m_Renderer, &info) == 0) {
+      LogF("Renderer backend: %s", info.name);
+      if (info.num_texture_formats > 0) {
+        m_FramebufferFormatEnum = info.texture_formats[0];
+      }
+      for (Uint32 i = 0; i < info.num_texture_formats; ++i) {
+        LogF("Supported[%u]: %s", i,
+             SDL_GetPixelFormatName(info.texture_formats[i]));
+      }
+    }
+
+    if (SDL_ISPIXELFORMAT_FOURCC(m_FramebufferFormatEnum) ||
+        SDL_BYTESPERPIXEL(m_FramebufferFormatEnum) !=
+            static_cast<int>(sizeof(uint32_t))) {
+      LogF("Unsupported primary format (%s). Fallback to ARGB8888.",
+           SDL_GetPixelFormatName(m_FramebufferFormatEnum));
+      m_FramebufferFormatEnum = SDL_PIXELFORMAT_ARGB8888;
+    }
+
+    m_FramebufferFormat = SDL_AllocFormat(m_FramebufferFormatEnum);
+    if (m_FramebufferFormat == nullptr) {
+      LogF("SDL_AllocFormat failed for %s: %s",
+           SDL_GetPixelFormatName(m_FramebufferFormatEnum), SDL_GetError());
+      m_FramebufferFormatEnum = SDL_PIXELFORMAT_ARGB8888;
+      m_FramebufferFormat = SDL_AllocFormat(m_FramebufferFormatEnum);
+    }
+    if (m_FramebufferFormat != nullptr) {
+      LogF("Selected framebuffer format: %s (bpp=%u)",
+           SDL_GetPixelFormatName(m_FramebufferFormatEnum),
+           m_FramebufferFormat->BitsPerPixel);
+    }
+
     m_MainTexture =
-        SDL_CreateTexture(m_Renderer, SDL_PIXELFORMAT_RGBA8888,
+        SDL_CreateTexture(m_Renderer, m_FramebufferFormatEnum,
                           SDL_TEXTUREACCESS_STREAMING, m_Width, m_Height);
+    if (m_MainTexture == nullptr) {
+      LogF("SDL_CreateTexture failed for %s: %s",
+           SDL_GetPixelFormatName(m_FramebufferFormatEnum), SDL_GetError());
+      SDL_assert(false);
+      return;
+    }
 
     m_Camera->aspect = (float)m_Width / m_Height;
     m_Camera->fov = 45.0f;
@@ -34,7 +80,7 @@ class Renderer {
     //        m_TgaTexture = m_TextureLoader->LoadTGATextureWithName(m_Renderer,
     //        "keep-carm.tga");
     m_TgaTexture = m_TextureLoader->LoadTGATextureWithName(
-        m_Renderer, "numbered_checker.tga");
+        m_Renderer, "numbered_checker.tga", m_FramebufferFormatEnum);
     if (m_TgaTexture == nullptr) {
       LogF("Failed to load texture");
     }
@@ -49,26 +95,48 @@ class Renderer {
     delete[] m_ZBuffer;
     delete m_Camera;
     delete m_TextureLoader;
+    if (m_FramebufferFormat != nullptr) {
+      SDL_FreeFormat(m_FramebufferFormat);
+      m_FramebufferFormat = nullptr;
+    }
     SDL_DestroyTexture(m_MainTexture);
     SDL_DestroyRenderer(m_Renderer);
   }
 
   void Render(double delta) {
-    memset((char*)m_Framebuffer, 0, sizeof(int) * m_Width * m_Height);
+    memset((char*)m_Framebuffer, 0, sizeof(uint32_t) * m_Width * m_Height);
     std::fill(m_ZBuffer, m_ZBuffer + m_Width * m_Height, 1.0f);
 
-    // RenderTriangle();
+//     RenderTriangle();
     //  RenderCubeLines();
     RenderCubeMesh(delta);
 
-    SDL_UpdateTexture(m_MainTexture, nullptr, m_Framebuffer, m_Width * 4);
+    SDL_UpdateTexture(m_MainTexture, nullptr, m_Framebuffer,
+                      m_Width * static_cast<int>(sizeof(uint32_t)));
     SDL_RenderCopy(m_Renderer, m_MainTexture, nullptr, nullptr);
     SDL_RenderPresent(m_Renderer);
     SDL_Delay(32);
   }
 
  private:
-  void DrawPoint(int x, int y, int color) {
+  uint32_t PackColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a) const {
+    if (m_FramebufferFormat == nullptr) {
+      return (static_cast<uint32_t>(a) << 24) |
+             (static_cast<uint32_t>(r) << 16) |
+             (static_cast<uint32_t>(g) << 8) | static_cast<uint32_t>(b);
+    }
+    return SDL_MapRGBA(m_FramebufferFormat, r, g, b, a);
+  }
+
+  uint32_t PackAARRGGBB(uint32_t color) const {
+    const uint8_t a = static_cast<uint8_t>((color >> 24) & 0xFF);
+    const uint8_t r = static_cast<uint8_t>((color >> 16) & 0xFF);
+    const uint8_t g = static_cast<uint8_t>((color >> 8) & 0xFF);
+    const uint8_t b = static_cast<uint8_t>(color & 0xFF);
+    return PackColor(r, g, b, a);
+  }
+
+  void DrawPoint(int x, int y, uint32_t color) {
     if (x >= m_Width || x < 0) return;
     if (y >= m_Height || y < 0) return;
 
@@ -78,8 +146,9 @@ class Renderer {
   /**
    * Draw line with Bresenham algorithm
    */
-  void DrawLine(const Vector2& startPos, const Vector2& endPos, int color) {
-    auto drawLow = [this](int x0, int y0, int x1, int y1, int color) {
+  void DrawLine(const Vector2& startPos, const Vector2& endPos,
+                uint32_t color) {
+    auto drawLow = [this](int x0, int y0, int x1, int y1, uint32_t color) {
       int dx = x1 - x0, dy = y1 - y0;
       int yi = 1;
       if (dy < 0) {
@@ -100,7 +169,7 @@ class Renderer {
       }
     };
 
-    auto drawHigh = [this](int x0, int y0, int x1, int y1, int color) {
+    auto drawHigh = [this](int x0, int y0, int x1, int y1, uint32_t color) {
       int dx = x1 - x0, dy = y1 - y0;
       int xi = 1;
       if (dx < 0) {
@@ -171,7 +240,7 @@ class Renderer {
       tri[i].x = v.x, tri[i].y = v.y, tri[i].z = v.z;
     }
 
-    const int fillColor = 0xFF33AAFF;
+    const uint32_t fillColor = PackAARRGGBB(0xFF33AAFF);
 
     // #1
     // FillTriangleBarycentric(tri[0], tri[1], tri[2], fillColor);
@@ -183,14 +252,14 @@ class Renderer {
     FillTriangleTexture(tri[0], tri[1], tri[2], m_TgaTexture->PixelData());
 
     // Draw edges
-    const int whiteColor = 0xFFFFFFFF;
+    const uint32_t whiteColor = PackAARRGGBB(0xFFFFFFFF);
     DrawLine({tri[0].x, tri[0].y}, {tri[1].x, tri[1].y}, whiteColor);
     DrawLine({tri[1].x, tri[1].y}, {tri[2].x, tri[2].y}, whiteColor);
     DrawLine({tri[0].x, tri[0].y}, {tri[2].x, tri[2].y}, whiteColor);
   }
 
   void FillTriangleBarycentric(const Vector3& v0, const Vector3& v1,
-                               const Vector3& v2, int color) {
+                               const Vector3& v2, uint32_t color) {
     const float minX = std::min({v0.x, v1.x, v2.x});
     const float maxX = std::max({v0.x, v1.x, v2.x});
     const float minY = std::min({v0.y, v1.y, v2.y});
@@ -228,7 +297,7 @@ class Renderer {
   }
 
   void DrawTri(const Vector3& v0, const Vector3& v1, const Vector3& v2,
-               int color, bool cullBackface = true) {
+               uint32_t color, bool cullBackface = true) {
     const float minX = std::min({v0.x, v1.x, v2.x});
     const float maxX = std::max({v0.x, v1.x, v2.x});
     const float minY = std::min({v0.y, v1.y, v2.y});
@@ -314,7 +383,7 @@ class Renderer {
       cube[i].x = v.x, cube[i].y = v.y, cube[i].z = v.z;
     }
 
-    const int fillColor = 0XFF33AAFF;
+    const uint32_t fillColor = PackAARRGGBB(0XFF33AAFF);
     // Front
     DrawTri(cube[0], cube[1], cube[2], fillColor, true);
     DrawTri(cube[0], cube[2], cube[3], fillColor, true);
@@ -334,7 +403,7 @@ class Renderer {
     DrawTri(cube[0], cube[1], cube[5], fillColor, true);
     DrawTri(cube[0], cube[5], cube[4], fillColor, true);
 
-    const int whiteColor = 0xFFFFFFFF;
+    const uint32_t whiteColor = PackAARRGGBB(0xFFFFFFFF);
     DrawLine({cube[0].x, cube[0].y}, {cube[1].x, cube[1].y}, whiteColor);
     DrawLine({cube[1].x, cube[1].y}, {cube[2].x, cube[2].y}, whiteColor);
     DrawLine({cube[2].x, cube[2].y}, {cube[3].x, cube[3].y}, whiteColor);
@@ -352,7 +421,7 @@ class Renderer {
   }
 
   void FillTriangleTexture(const Vector3& v0, const Vector3& v1,
-                           const Vector3& v2, const RGBA* bitmap) {
+                           const Vector3& v2, const Color* bitmap) {
     if (bitmap == nullptr || m_TgaTexture == nullptr) {
       return;
     }
@@ -434,12 +503,10 @@ class Renderer {
                 texMaxX, std::max(0, (int)(u * (float)texMaxX + 0.5f)));
             const int texY = std::min(
                 texMaxY, std::max(0, (int)(v * (float)texMaxY + 0.5f)));
-            const RGBA& sample = bitmap[texX + texY * texWidth];
+            const Color& sample = bitmap[texX + texY * texWidth];
 
-            m_Framebuffer[idx] = ((unsigned int)sample.a << 24) |
-                                 ((unsigned int)sample.b << 16) |
-                                 ((unsigned int)sample.g << 8) |
-                                 (unsigned int)sample.r;
+            // Map logical color channels to the selected framebuffer format.
+            m_Framebuffer[idx] = PackColor(sample.r, sample.g, sample.b, sample.a);
           }
         }
 
@@ -455,10 +522,10 @@ class Renderer {
   }
 
   // TODO: Bilinear sampling
-  RGBA SampleTexture(const TGA* texture, float u, float v) {
+  Color SampleTexture(const TGA* texture, float u, float v) {
     if (texture == nullptr || texture->Header() == nullptr ||
         texture->PixelData() == nullptr) {
-      return RGBA{};
+      return Color{};
     }
 
     u = std::max(0.0f, std::min(1.0f, u));
@@ -468,7 +535,7 @@ class Renderer {
     const int texWidth = (int)texture->Header()->width;
     const int texHeight = (int)texture->Header()->height;
     if (texWidth <= 0 || texHeight <= 0) {
-      return RGBA{};
+      return Color{};
     }
 
     const int tx =
@@ -649,7 +716,7 @@ class Renderer {
                            m_ZBuffer);
 
       // [Optional] Draw wireframe edges
-      const int whiteColor = 0xFFFFFFFF;
+      const uint32_t whiteColor = PackAARRGGBB(0xFFFFFFFF);
       DrawLine({v0.x, v0.y}, {v1.x, v1.y}, whiteColor);
       DrawLine({v1.x, v1.y}, {v2.x, v2.y}, whiteColor);
       DrawLine({v0.x, v0.y}, {v2.x, v2.y}, whiteColor);
@@ -730,14 +797,14 @@ class Renderer {
         if (z >= m_ZBuffer[depthIndex]) {
           continue;
         }
-        RGBA color = SampleTexture(texture, u, v);
+        Color color = SampleTexture(texture, u, v);
 
         if ((static_cast<uint32_t>(color) >> 24) == 0) {
           continue;
         }
 
         m_ZBuffer[depthIndex] = z;
-        DrawPoint(x, y, (int)color.value);
+        DrawPoint(x, y, PackColor(color.r, color.g, color.b, color.a));
       }
     }
   }
@@ -751,13 +818,15 @@ class Renderer {
  private:
   int m_Width{0};
   int m_Height{0};
-  unsigned int* m_Framebuffer{nullptr};
+  uint32_t* m_Framebuffer{nullptr};
   WorldCamera* m_Camera{nullptr};
 
   Matrix4x4 m_ViewportMatrix, m_ProjectionMatrix, m_CameraMatrix;
 
   SDL_Renderer* m_Renderer{nullptr};
   SDL_Texture* m_MainTexture{nullptr};
+  Uint32 m_FramebufferFormatEnum{SDL_PIXELFORMAT_ARGB8888};
+  SDL_PixelFormat* m_FramebufferFormat{nullptr};
   TextureLoader* m_TextureLoader{nullptr};
   float* m_ZBuffer{nullptr};
 
