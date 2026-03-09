@@ -79,7 +79,7 @@ class TGA {
 
   SDL_Texture const* SDLTexture() const { return m_Texture; }
 
-  bool ReadFromFile(const char* filepath, Uint32 supportedPixelFormat) {
+  bool ReadFromFile(const char* filepath, uint32_t supportedPixelFormat) {
     FILE* fp = fopen(filepath, "rb");
     if (fp == nullptr) {
       return false;
@@ -161,7 +161,7 @@ class TGA {
     return true;
   }
 
-  bool CreateTexture(SDL_Renderer* renderer, Uint32 format) {
+  bool CreateTexture(SDL_Renderer* renderer, uint32_t format) {
     if (renderer == nullptr) {
       return false;
     }

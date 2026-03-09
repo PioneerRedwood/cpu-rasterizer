@@ -32,7 +32,7 @@ class Renderer {
       if (info.num_texture_formats > 0) {
         m_FramebufferFormatEnum = info.texture_formats[0];
       }
-      for (Uint32 i = 0; i < info.num_texture_formats; ++i) {
+      for (uint32_t i = 0; i < info.num_texture_formats; ++i) {
         LogF("Supported[%u]: %s", i,
              SDL_GetPixelFormatName(info.texture_formats[i]));
       }
@@ -86,9 +86,8 @@ class Renderer {
       LogF("Failed to load texture");
     }
 
-    // m_SimpleCubeMesh =
-    // loadSimpleMeshFromObj("resources/simplified_stanford_bunny.obj");
     BuildSimpleCubeMesh();
+		BuildBunnyMesh();
   }
 
   ~Renderer() {
@@ -108,9 +107,10 @@ class Renderer {
     memset((char*)m_Framebuffer, 0, sizeof(uint32_t) * m_Width * m_Height);
     std::fill(m_ZBuffer, m_ZBuffer + m_Width * m_Height, 1.0f);
 
-//     RenderTriangle();
-    //  RenderCubeLines();
-    RenderCubeMesh(delta);
+    // RenderTriangle();
+    // RenderCubeLines();
+    // RenderCubeMesh(delta);
+    RenderBunnyMesh();
 
     SDL_UpdateTexture(m_MainTexture, nullptr, m_Framebuffer,
                       m_Width * static_cast<int>(sizeof(uint32_t)));
@@ -244,13 +244,13 @@ class Renderer {
     const uint32_t fillColor = PackAARRGGBB(0xFF33AAFF);
 
     // #1
-    // FillTriangleBarycentric(tri[0], tri[1], tri[2], fillColor);
+    FillTriangleBarycentric(tri[0], tri[1], tri[2], fillColor);
 
     // #2
     // DrawTri(tri[0], tri[1], tri[2], fillColor, true);
 
     // #3
-    FillTriangleTexture(tri[0], tri[1], tri[2], m_TgaTexture->PixelData());
+    // FillTriangleTexture(tri[0], tri[1], tri[2], m_TgaTexture->PixelData());
 
     // Draw edges
     const uint32_t whiteColor = PackAARRGGBB(0xFFFFFFFF);
@@ -741,8 +741,6 @@ class Renderer {
       const Vector3& v1 = m_SimpleCubeTransformVerts[i1];
       const Vector3& v2 = m_SimpleCubeTransformVerts[i2];
 
-      // For texture mapping, use fillTriangleTexture instead of
-      // fillTriangleBarycentric
       // FillTriangleBarycentric(v0, v1, v2, 0xFF33AAFF);
 
       // FillTriangleTexture(v0, v1, v2, m_SimpleCubeMesh->tga->PixelData());
@@ -859,6 +857,42 @@ class Renderer {
   // TODO: 8. Other shaders; Flat, Gouraud, Phong, Blinn-Phong, etc.
 
   // TODO: 9. OBJ mesh loading and rendering
+  void BuildBunnyMesh() {
+    m_BunnyMesh = m_TextureLoader->LoadSimpleMeshFromObj("../resources/simplified_stanford_bunny.obj");
+    if(m_BunnyMesh != nullptr) {
+      m_BunnyTransformVerts.resize(m_BunnyMesh->verts.size());
+    }
+  }
+
+  void RenderBunnyMesh() {
+    if(m_BunnyMesh == nullptr) {
+      return;
+    }
+
+    Matrix4x4 modelMat = Matrix4x4::identity;
+    m_RotateRadian += 0.06f;
+    modelMat.RotateY(m_RotateRadian);
+
+    for(size_t i = 0; i < m_BunnyMesh->verts.size(); ++i) {
+      const Vector3& src = m_BunnyMesh->verts[i];
+      const Vector3 rotated = modelMat * src;
+      Vector4 v = { rotated.x, rotated.y, rotated.z, 1.0f };
+      TransformToScreen(v);
+      m_BunnyTransformVerts[i] = { v.x, v.y, v.z };
+    }
+
+    const uint32_t fillColor = PackAARRGGBB(0xFF33AAFF);
+    for(size_t idx = 0; idx + 2 < m_BunnyMesh->indices.size(); idx+=3) {
+      uint32_t i0 = m_BunnyMesh->indices[idx];
+      uint32_t i1 = m_BunnyMesh->indices[idx+1];
+      uint32_t i2 = m_BunnyMesh->indices[idx+2];
+      const Vector3& v0 = m_BunnyTransformVerts[i0];
+      const Vector3& v1 = m_BunnyTransformVerts[i1];
+      const Vector3& v2 = m_BunnyTransformVerts[i2];
+
+      DrawTri(v0, v1, v2, fillColor, true);
+    }
+  }
 
   // TODO: 10. Camera movement and interaction
 
@@ -872,7 +906,7 @@ class Renderer {
 
   SDL_Renderer* m_Renderer{nullptr};
   SDL_Texture* m_MainTexture{nullptr};
-  Uint32 m_FramebufferFormatEnum{SDL_PIXELFORMAT_ARGB8888};
+  uint32_t m_FramebufferFormatEnum{SDL_PIXELFORMAT_ARGB8888};
   SDL_PixelFormat* m_FramebufferFormat{nullptr};
   TextureLoader* m_TextureLoader{nullptr};
   float* m_ZBuffer{nullptr};
@@ -901,5 +935,8 @@ class Renderer {
   float m_SimpleCubeRotateRadian{0.0f};
   // End Render Mesh
 
+  // Start Render Bunny Mesh
   SimpleMesh* m_BunnyMesh{nullptr};
+  std::vector<Vector3> m_BunnyTransformVerts;
+  // End Render Bunny Mesh
 };
