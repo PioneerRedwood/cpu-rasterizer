@@ -7,6 +7,7 @@
 
 #include <SDL.h>
 
+#include "DebugDumpApi.hpp"
 #include "Log.hpp"
 #include "Renderer.hpp"
 
@@ -29,7 +30,7 @@ class Program {
 
     window = SDL_CreateWindow("cpu-rasterizer", SDL_WINDOWPOS_CENTERED,
                               SDL_WINDOWPOS_CENTERED, width, height,
-                              SDL_WINDOW_SHOWN);
+                              debugdump::WindowFlags(SDL_WINDOW_SHOWN));
     if (window == nullptr) {
       LogF("Window could not be created! SDL_Error: %s", SDL_GetError());
       return -1;
@@ -50,6 +51,10 @@ class Program {
       HandlePollEvent();
       Render(delta);
 
+      if (debugdump::ShouldQuitAfterFrame()) {
+        quit = true;
+      }
+
       SDL_Delay(1);
     }
 
@@ -67,7 +72,7 @@ class Program {
   }
 
   void HandleKeyInput(SDL_Event event) {
-    // Propaganda the key event invoked
+		renderer->HandleKeyInput(event.key.keysym.sym);
   }
 
   void HandlePollEvent() {

@@ -1,1 +1,3 @@
 build/
+src/DebugDump.h
+src/DebugDumpApi.hpp
