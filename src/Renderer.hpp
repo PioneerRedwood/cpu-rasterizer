@@ -6,10 +6,18 @@
 #include <cmath>
 #include <cstdint>
 
-#include "DebugDumpApi.hpp"
 #include "Mesh.hpp"
 #include "TextureLoader.hpp"
 #include "WorldCamera.hpp"
+
+#if __has_include("DebugDump.h")
+#include "DebugDump.h"
+#else
+namespace debugdump {
+inline void DumpFramebufferIfRequested(uint32_t*, int, int, uint32_t) {}
+inline bool IsPointCloudModeEnabled() { return false; }
+}  // namespace debugdump
+#endif
 
 class Renderer
 {
@@ -591,8 +599,6 @@ private:
     }
   }
 
-  // TODO: 8. Other shaders; Flat, Gouraud, Phong, Blinn-Phong, etc.
-
   void BuildBunnyMesh()
   {
     m_BunnyMesh = m_TextureLoader->LoadSimpleMeshFromObj("../resources/bunny.obj");
@@ -681,8 +687,6 @@ private:
       DrawTri(screen2, screen1, screen0, fillColor, true);
     }
   }
-
-  // TODO: 10. Camera movement and interaction
 
 private:
   int m_Width{0};

@@ -7,9 +7,17 @@
 
 #include <SDL.h>
 
-#include "DebugDumpApi.hpp"
 #include "Log.hpp"
 #include "Renderer.hpp"
+
+#if __has_include("DebugDump.h")
+#include "DebugDump.h"
+#else
+namespace debugdump {
+inline Uint32 WindowFlags(Uint32 normalFlags) { return normalFlags; }
+inline bool ShouldQuitAfterFrame() { return false; }
+}  // namespace debugdump
+#endif
 
 class Program {
  public:
