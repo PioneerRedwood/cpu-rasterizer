@@ -83,12 +83,6 @@ public:
     m_Camera->fov = 45.0f;
 
     SetupMatrices();
-    // Initialize shader uniforms
-    m_BasicLitShaderUniforms.projection = Matrix4x4::identity;
-    m_BasicLitShaderUniforms.view = Matrix4x4::identity;
-    m_BasicLitShaderUniforms.model = Matrix4x4::identity;
-    m_BasicLitShaderUniforms.lightDir = m_LightDir;
-    m_BasicLitShaderUniforms.texture = nullptr;
 
     m_TextureLoader = new TextureLoader("resources");
     BuildBunnyMesh();
@@ -114,8 +108,8 @@ public:
   {
     ClearBuffers();
 
-    // RenderCubeMesh(static_cast<float>(delta));
-    RenderBunnyMesh();
+    //RenderBunnyMesh(m_BasicLitShader, m_BasicLitShaderUniforms);
+    RenderBunnyMesh(m_PhongShader, m_PhongShaderUniforms);
 
     SDL_UpdateTexture(m_MainTexture, nullptr, m_Framebuffer,
                       m_Width * static_cast<int>(sizeof(uint32_t)));
@@ -194,15 +188,6 @@ private:
              (static_cast<uint32_t>(g) << 8) | static_cast<uint32_t>(b);
     }
     return SDL_MapRGBA(m_FramebufferFormat, r, g, b, a);
-  }
-
-  uint32_t PackAARRGGBB(uint32_t color) const
-  {
-    const uint8_t a = static_cast<uint8_t>((color >> 24) & 0xFF);
-    const uint8_t r = static_cast<uint8_t>((color >> 16) & 0xFF);
-    const uint8_t g = static_cast<uint8_t>((color >> 8) & 0xFF);
-    const uint8_t b = static_cast<uint8_t>(color & 0xFF);
-    return PackColor(r, g, b, a);
   }
 
   void DrawPoint(int x, int y, float z, uint32_t color)
@@ -479,7 +464,7 @@ private:
     }
   }
 
-  void RenderBunnyMesh()
+  void RenderBunnyMesh(const Shader& shader, ShaderUniforms& uniforms)
   {
     if (m_BunnyMesh == nullptr)
     {
@@ -494,11 +479,12 @@ private:
     }
     modelMat.Rotate(0.0f, m_RotateRadian, 0.0f);
 
-    m_BasicLitShaderUniforms.model = modelMat;
-    m_BasicLitShaderUniforms.view = m_CameraMatrix;
-    m_BasicLitShaderUniforms.projection = m_ProjectionMatrix;
-    m_BasicLitShaderUniforms.lightDir = m_LightDir.Normalize();
-    m_BasicLitShaderUniforms.texture = m_BunnyMesh->tga;
+    uniforms.model = modelMat;
+    uniforms.view = m_CameraMatrix;
+    uniforms.projection = m_ProjectionMatrix;
+    uniforms.lightDir = m_LightDir.Normalize();
+    uniforms.texture = m_BunnyMesh->tga;
+    uniforms.cameraPosition = m_Camera->eye;
 
     for (size_t idx = 0; idx + 2 < m_BunnyMesh->indices.size(); idx += 3)
     {
@@ -513,20 +499,12 @@ private:
       const VertexInput v2{m_BunnyNormalizedVerts[i2], m_BunnyMesh->normals[i2],
                            m_BunnyMesh->uvs[i2]};
 
-      const VertexOutput out0 =
-          m_BasicLitShader.VertexShader(v0, m_BasicLitShaderUniforms);
-      const VertexOutput out1 =
-          m_BasicLitShader.VertexShader(v1, m_BasicLitShaderUniforms);
-      const VertexOutput out2 =
-          m_BasicLitShader.VertexShader(v2, m_BasicLitShaderUniforms);
+      const VertexOutput out0 = shader.VertexShader(v0, uniforms);
+      const VertexOutput out1 = shader.VertexShader(v1, uniforms);
+      const VertexOutput out2 = shader.VertexShader(v2, uniforms);
 
-      DrawShaderTri(out2, out1, out0, m_BasicLitShaderUniforms,
-                    m_BasicLitShader, true);
+      DrawShaderTri(out2, out1, out0, uniforms, shader, true);
     }
-  }
-
-  void RenderTriangle() {
-    
   }
 
 private:
@@ -553,8 +531,13 @@ private:
   Vector3 m_BunnyCenter{0.0f, 0.0f, 0.0f};
   float m_BunnyScale{1.0f};
 
-  // Using BasicLitShader
   Vector3 m_LightDir{-0.45f, 0.80f, -0.40f};
+  
+  // Using BasicLitShader
   BasicLitShader m_BasicLitShader;
   ShaderUniforms m_BasicLitShaderUniforms;
+
+  // Using PhongShader
+  PhongShader m_PhongShader;
+  ShaderUniforms m_PhongShaderUniforms;
 };
