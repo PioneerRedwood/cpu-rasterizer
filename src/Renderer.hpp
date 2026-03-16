@@ -9,15 +9,7 @@
 #include "Mesh.hpp"
 #include "TextureLoader.hpp"
 #include "WorldCamera.hpp"
-
-#if __has_include("DebugDump.h")
-#include "DebugDump.h"
-#else
-namespace debugdump {
-inline void DumpFramebufferIfRequested(uint32_t*, int, int, uint32_t) {}
-inline bool IsPointCloudModeEnabled() { return false; }
-}  // namespace debugdump
-#endif
+#include "Shader.hpp"
 
 class Renderer
 {
@@ -28,7 +20,6 @@ public:
     m_Framebuffer = new uint32_t[m_Width * m_Height];
     m_Camera = new WorldCamera();
     m_ZBuffer = new float[m_Width * m_Height];
-    std::fill(m_ZBuffer, m_ZBuffer + m_Width * m_Height, 1.0f);
 
     m_Renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     if (m_Renderer == nullptr)
@@ -92,11 +83,15 @@ public:
     m_Camera->fov = 45.0f;
 
     SetupMatrices();
+    // Initialize shader uniforms
+    m_BasicLitShaderUniforms.projection = Matrix4x4::identity;
+    m_BasicLitShaderUniforms.view = Matrix4x4::identity;
+    m_BasicLitShaderUniforms.model = Matrix4x4::identity;
+    m_BasicLitShaderUniforms.lightDir = m_LightDir;
+    m_BasicLitShaderUniforms.texture = nullptr;
 
     m_TextureLoader = new TextureLoader("resources");
-
-    BuildSimpleCubeMesh();
-    // BuildBunnyMesh();
+    BuildBunnyMesh();
   }
 
   ~Renderer()
@@ -104,7 +99,6 @@ public:
     delete[] m_Framebuffer;
     delete[] m_ZBuffer;
     delete m_Camera;
-    delete m_SimpleCubeMesh;
     delete m_BunnyMesh;
     delete m_TextureLoader;
     if (m_FramebufferFormat != nullptr)
@@ -127,8 +121,7 @@ public:
                       m_Width * static_cast<int>(sizeof(uint32_t)));
     SDL_RenderCopy(m_Renderer, m_MainTexture, nullptr, nullptr);
     SDL_RenderPresent(m_Renderer);
-    debugdump::DumpFramebufferIfRequested(m_Framebuffer, m_Width, m_Height,
-                                          m_FramebufferFormatEnum);
+
     SDL_Delay(32);
   }
 
@@ -239,6 +232,12 @@ private:
   {
     Vector4 clip = m_ProjectionMatrix *
                    (m_CameraMatrix * Vector4(point.x, point.y, point.z, 1.0f));
+    return ProjectClipPointToScreen(clip, out);
+  }
+
+  bool ProjectClipPointToScreen(const Vector4 &clipPosition, Vector3 &out) const
+  {
+    Vector4 clip = clipPosition;
     if (clip.w <= 1e-6f)
     {
       return false;
@@ -258,86 +257,6 @@ private:
     clip = m_ViewportMatrix * clip;
     out = {clip.x, clip.y, clip.z};
     return true;
-  }
-
-  Vector3 TransformWorldPointToView(const Vector3 &point) const
-  {
-    const Vector4 view =
-        m_CameraMatrix * Vector4(point.x, point.y, point.z, 1.0f);
-    return {view.x, view.y, view.z};
-  }
-
-  bool IsFrontFacingViewSpace(const Vector3 &view0, const Vector3 &view1,
-                              const Vector3 &view2) const
-  {
-    const Vector3 edge0 = view1 - view0;
-    const Vector3 edge1 = view2 - view0;
-    const Vector3 normal = math::CrossProduct(edge0, edge1);
-    if (math::DotProduct(normal, normal) <= 1e-8f)
-    {
-      return false;
-    }
-
-    const Vector3 centroid = (view0 + view1 + view2) * (1.0f / 3.0f);
-    const Vector3 toCamera = centroid * -1.0f;
-    return math::DotProduct(normal, toCamera) < 0.0f;
-  }
-
-  uint32_t ShadeBunnyFace(const Vector3 &world0, const Vector3 &world1,
-                          const Vector3 &world2) const
-  {
-    const Vector3 edge0 = world1 - world0;
-    const Vector3 edge1 = world2 - world0;
-    Vector3 normal = math::CrossProduct(edge0, edge1);
-    const float normalLengthSq = math::DotProduct(normal, normal);
-    if (normalLengthSq <= 1e-8f)
-    {
-      return PackAARRGGBB(0xFFB0D0E8);
-    }
-
-    normal = normal.Normalize();
-    const Vector3 lightDir = Vector3(-0.35f, 0.85f, -0.40f).Normalize();
-    const float diffuse = std::max(0.0f, math::DotProduct(normal, lightDir));
-    const float light = 0.22f + diffuse * 0.78f;
-
-    const uint8_t r = static_cast<uint8_t>(110.0f + light * 90.0f);
-    const uint8_t g = static_cast<uint8_t>(150.0f + light * 80.0f);
-    const uint8_t b = static_cast<uint8_t>(175.0f + light * 60.0f);
-    return PackColor(r, g, b, 255);
-  }
-
-  Vector3 TransformDirection(const Matrix4x4 &matrix,
-                             const Vector3 &direction) const
-  {
-    const Vector4 transformed =
-        matrix * Vector4(direction.x, direction.y, direction.z, 0.0f);
-    Vector3 result{transformed.x, transformed.y, transformed.z};
-    if (math::DotProduct(result, result) <= 1e-8f)
-    {
-      return {0.0f, 1.0f, 0.0f};
-    }
-    return result.Normalize();
-  }
-
-  uint32_t ShadeMeshNormals(const Vector3 &normal0, const Vector3 &normal1,
-                            const Vector3 &normal2,
-                            const Matrix4x4 &modelMat) const
-  {
-    Vector3 normal = (normal0 + normal1 + normal2) * (1.0f / 3.0f);
-    if (math::DotProduct(normal, normal) <= 1e-8f)
-    {
-      normal = {0.0f, 1.0f, 0.0f};
-    }
-
-    normal = TransformDirection(modelMat, normal);
-    const Vector3 lightDir = Vector3(-0.45f, 0.80f, -0.40f).Normalize();
-    const float diffuse = std::max(0.0f, math::DotProduct(normal, lightDir));
-    const float light = 0.20f + diffuse * 0.80f;
-
-    const uint8_t r = static_cast<uint8_t>(70.0f + light * 140.0f);
-    const uint8_t g = static_cast<uint8_t>(95.0f + light * 115.0f);
-    const uint8_t b = static_cast<uint8_t>(140.0f + light * 95.0f);
-    return PackColor(r, g, b, 255);
   }
 
   void SetupMatrices()
@@ -419,183 +338,107 @@ private:
     }
   }
 
-  Color SampleTexture(const TGA *texture, float u, float v)
+  void DrawShaderTri(const VertexOutput &out0, const VertexOutput &out1,
+                     const VertexOutput &out2, const ShaderUniforms &uniforms,
+                     const Shader &shader, bool cullBackface = true)
   {
-    if (texture == nullptr || texture->Header() == nullptr ||
-        texture->PixelData() == nullptr)
+    Vector3 screen0{};
+    Vector3 screen1{};
+    Vector3 screen2{};
+    if (!ProjectClipPointToScreen(out0.clipPosition, screen0) ||
+        !ProjectClipPointToScreen(out1.clipPosition, screen1) ||
+        !ProjectClipPointToScreen(out2.clipPosition, screen2))
     {
-      return Color{};
-    }
-
-    u = std::max(0.0f, std::min(1.0f, u));
-    v = std::max(0.0f, std::min(1.0f, v));
-    v = 1.0f - v;
-
-    const int texWidth = (int)texture->Header()->width;
-    const int texHeight = (int)texture->Header()->height;
-    if (texWidth <= 0 || texHeight <= 0)
-    {
-      return Color{};
-    }
-
-    const int tx =
-        std::min(texWidth - 1, std::max(0, (int)(u * (float)(texWidth - 1))));
-    const int ty =
-        std::min(texHeight - 1, std::max(0, (int)(v * (float)(texHeight - 1))));
-    return texture->PixelData()[tx + ty * texWidth];
-  }
-
-  Color BilinearSampleTexture(const TGA *texture, float u, float v)
-  {
-    if (texture == nullptr || texture->Header() == nullptr ||
-        texture->PixelData() == nullptr)
-    {
-      return Color{};
-    }
-
-    u = std::max(0.0f, std::min(1.0f, u));
-    v = std::max(0.0f, std::min(1.0f, v));
-    v = 1.0f - v;
-
-    const int w = (int)texture->Header()->width;
-    const int h = (int)texture->Header()->height;
-    if (w <= 0 || h <= 0)
-    {
-      return Color{};
-    }
-
-    const Color *pixel = texture->PixelData();
-
-    const float x = u * (float)(w - 1);
-    const float y = v * (float)(h - 1);
-    const int x0 = std::max(0, std::min(w - 1, (int)std::floor(x)));
-    const int y0 = std::max(0, std::min(h - 1, (int)std::floor(y)));
-    const int x1 = std::min(w - 1, x0 + 1);
-    const int y1 = std::min(h - 1, y0 + 1);
-    const float fx = x - (float)x0;
-    const float fy = y - (float)y0;
-
-    const Color &c00 = pixel[x0 + y0 * w]; // top-left
-    const Color &c10 = pixel[x1 + y0 * w]; // top-right
-    const Color &c01 = pixel[x0 + y1 * w]; // bottom-left
-    const Color &c11 = pixel[x1 + y1 * w]; // bottom-right
-
-    auto blendChannel = [fx, fy](uint8_t cc00, uint8_t cc10, uint8_t cc01,
-                                 uint8_t cc11) -> uint8_t
-    {
-      const float top = cc00 + (cc10 - cc00) * fx;
-      const float bottom = cc01 + (cc11 - cc01) * fx;
-      float value = top + (bottom - top) * fy;
-      value = std::max(0.0f, std::min(255.0f, value));
-      return static_cast<uint8_t>(value + 0.5f);
-    };
-
-    Color result{};
-    result.r = blendChannel(c00.r, c10.r, c01.r, c11.r);
-    result.g = blendChannel(c00.g, c10.g, c01.g, c11.g);
-    result.b = blendChannel(c00.b, c10.b, c01.b, c11.b);
-    result.a = blendChannel(c00.a, c10.a, c01.a, c11.a);
-    return result;
-  }
-
-  // Render simple cube mesh
-  void BuildSimpleCubeMesh()
-  {
-    m_SimpleCubeMesh =
-        m_TextureLoader->LoadSimpleMeshFromObj("../resources/cube.obj");
-    if (m_SimpleCubeMesh == nullptr || m_SimpleCubeMesh->verts.empty())
-    {
-      LogF("Failed to load cube.obj");
       return;
     }
 
-    Vector3 min = m_SimpleCubeMesh->verts[0];
-    Vector3 max = m_SimpleCubeMesh->verts[0];
-    for (const Vector3 &v : m_SimpleCubeMesh->verts)
-    {
-      min.x = std::min(min.x, v.x);
-      min.y = std::min(min.y, v.y);
-      min.z = std::min(min.z, v.z);
-      max.x = std::max(max.x, v.x);
-      max.y = std::max(max.y, v.y);
-      max.z = std::max(max.z, v.z);
-    }
+    const float minX = std::min({screen0.x, screen1.x, screen2.x});
+    const float maxX = std::max({screen0.x, screen1.x, screen2.x});
+    const float minY = std::min({screen0.y, screen1.y, screen2.y});
+    const float maxY = std::max({screen0.y, screen1.y, screen2.y});
 
-    m_SimpleCubeCenter = {(min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f,
-                          (min.z + max.z) * 0.5f};
-    const Vector3 size = max - min;
-    const float maxExtent = std::max({size.x, size.y, size.z});
-    if (maxExtent > 1e-6f)
-    {
-      m_SimpleCubeScale = 3.0f / maxExtent;
-    }
+    const int x0 = std::max(0, static_cast<int>(std::floor(minX)));
+    const int y0 = std::max(0, static_cast<int>(std::floor(minY)));
+    const int x1 = std::min(m_Width - 1, static_cast<int>(std::ceil(maxX)));
+    const int y1 = std::min(m_Height - 1, static_cast<int>(std::ceil(maxY)));
 
-    m_SimpleCubeNormalizedVerts.resize(m_SimpleCubeMesh->verts.size());
-    for (size_t i = 0; i < m_SimpleCubeMesh->verts.size(); ++i)
-    {
-      m_SimpleCubeNormalizedVerts[i] =
-          (m_SimpleCubeMesh->verts[i] - m_SimpleCubeCenter) *
-          m_SimpleCubeScale;
-    }
-  }
-
-  void RenderCubeMesh(float deltaMs)
-  {
-    if (m_SimpleCubeMesh == nullptr)
+    const Vector2 p0{screen0.x, screen0.y};
+    const Vector2 p1{screen1.x, screen1.y};
+    const Vector2 p2{screen2.x, screen2.y};
+    const float area = math::EdgeFunction(p0, p1, screen2.x, screen2.y);
+    if (std::abs(area) < 1e-6f)
     {
       return;
     }
-    const bool debugPoints = debugdump::IsPointCloudModeEnabled();
 
-    m_SimpleCubeRotateRadian += deltaMs * 0.02f;
-    if (m_SimpleCubeRotateRadian > 360.0f)
+    if (cullBackface && area < 0.0f)
     {
-      m_SimpleCubeRotateRadian -= 360.0f;
-    }
-    else if (m_SimpleCubeRotateRadian < -360.0f)
-    {
-      m_SimpleCubeRotateRadian += 360.0f;
+      return;
     }
 
-    Matrix4x4 modelMat = Matrix4x4::identity;
-    modelMat.Rotate(m_SimpleCubeRotateRadian, m_SimpleCubeRotateRadian,
-                    m_SimpleCubeRotateRadian);
+    const float invArea = 1.0f / area;
 
-    for (size_t idx = 0; idx + 2 < m_SimpleCubeMesh->indices.size(); idx += 3)
+    for (int y = y0; y <= y1; ++y)
     {
-      uint32_t i0 = m_SimpleCubeMesh->indices[idx];
-      uint32_t i1 = m_SimpleCubeMesh->indices[idx + 1];
-      uint32_t i2 = m_SimpleCubeMesh->indices[idx + 2];
-      const Vector3 world0 = modelMat * m_SimpleCubeNormalizedVerts[i0];
-      const Vector3 world1 = modelMat * m_SimpleCubeNormalizedVerts[i1];
-      const Vector3 world2 = modelMat * m_SimpleCubeNormalizedVerts[i2];
-
-      Vector3 screen0{};
-      Vector3 screen1{};
-      Vector3 screen2{};
-      if (!ProjectWorldPointToScreen(world0, screen0) ||
-          !ProjectWorldPointToScreen(world1, screen1) ||
-          !ProjectWorldPointToScreen(world2, screen2))
+      for (int x = x0; x <= x1; ++x)
       {
-        continue;
-      }
+        const float px = static_cast<float>(x) + 0.5f;
+        const float py = static_cast<float>(y) + 0.5f;
 
-      if (debugPoints)
-      {
-        DrawPoint(static_cast<int>(screen0.x), static_cast<int>(screen0.y),
-                  screen0.z, PackAARRGGBB(0xFFFFFFFF));
-        DrawPoint(static_cast<int>(screen1.x), static_cast<int>(screen1.y),
-                  screen1.z, PackAARRGGBB(0xFFFFFFFF));
-        DrawPoint(static_cast<int>(screen2.x), static_cast<int>(screen2.y),
-                  screen2.z, PackAARRGGBB(0xFFFFFFFF));
-        continue;
-      }
+        const float w0 = math::EdgeFunction(p1, p2, px, py);
+        const float w1 = math::EdgeFunction(p2, p0, px, py);
+        const float w2 = math::EdgeFunction(p0, p1, px, py);
 
-      const uint32_t fillColor =
-          ShadeMeshNormals(m_SimpleCubeMesh->normals[i0],
-                           m_SimpleCubeMesh->normals[i1],
-                           m_SimpleCubeMesh->normals[i2], modelMat);
-      DrawTri(screen0, screen1, screen2, fillColor, false);
+        const bool insideCCW = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f);
+        const bool insideCW = (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
+        const bool inside = cullBackface ? insideCCW
+                                         : ((area > 0.0f && insideCCW) ||
+                                            (area < 0.0f && insideCW));
+        if (!inside)
+        {
+          continue;
+        }
+
+        const float b0 = w0 * invArea;
+        const float b1 = w1 * invArea;
+        const float b2 = w2 * invArea;
+        const float z = b0 * screen0.z + b1 * screen1.z + b2 * screen2.z;
+        if (z < 0.0f || z > 1.0f)
+        {
+          continue;
+        }
+
+        const int idx = x + y * m_Width;
+        if (z >= m_ZBuffer[idx])
+        {
+          continue;
+        }
+
+        const float pw0 = b0 * out0.invW;
+        const float pw1 = b1 * out1.invW;
+        const float pw2 = b2 * out2.invW;
+        const float invWeightSum = pw0 + pw1 + pw2;
+        if (std::abs(invWeightSum) <= 1e-8f)
+        {
+          continue;
+        }
+
+        const float invSum = 1.0f / invWeightSum;
+        PixelInput pixelInput{};
+        pixelInput.worldPosition =
+            (out0.worldPosition * pw0 + out1.worldPosition * pw1 +
+             out2.worldPosition * pw2) *
+            invSum;
+        pixelInput.normal =
+            (out0.normal * pw0 + out1.normal * pw1 + out2.normal * pw2) *
+            invSum;
+        pixelInput.uv =
+            (out0.uv * pw0 + out1.uv * pw1 + out2.uv * pw2) * invSum;
+
+        const Color color = shader.PixelShader(pixelInput, uniforms);
+        m_ZBuffer[idx] = z;
+        m_Framebuffer[idx] = PackColor(color.r, color.g, color.b, color.a);
+      }
     }
   }
 
@@ -642,7 +485,6 @@ private:
     {
       return;
     }
-    const bool debugPoints = debugdump::IsPointCloudModeEnabled();
 
     Matrix4x4 modelMat = Matrix4x4::identity;
     m_RotateRadian += 0.45f;
@@ -652,40 +494,39 @@ private:
     }
     modelMat.Rotate(0.0f, m_RotateRadian, 0.0f);
 
+    m_BasicLitShaderUniforms.model = modelMat;
+    m_BasicLitShaderUniforms.view = m_CameraMatrix;
+    m_BasicLitShaderUniforms.projection = m_ProjectionMatrix;
+    m_BasicLitShaderUniforms.lightDir = m_LightDir.Normalize();
+    m_BasicLitShaderUniforms.texture = m_BunnyMesh->tga;
+
     for (size_t idx = 0; idx + 2 < m_BunnyMesh->indices.size(); idx += 3)
     {
       uint32_t i0 = m_BunnyMesh->indices[idx];
       uint32_t i1 = m_BunnyMesh->indices[idx + 1];
       uint32_t i2 = m_BunnyMesh->indices[idx + 2];
 
-      const Vector3 world0 = modelMat * m_BunnyNormalizedVerts[i0];
-      const Vector3 world1 = modelMat * m_BunnyNormalizedVerts[i1];
-      const Vector3 world2 = modelMat * m_BunnyNormalizedVerts[i2];
+      const VertexInput v0{m_BunnyNormalizedVerts[i0], m_BunnyMesh->normals[i0],
+                           m_BunnyMesh->uvs[i0]};
+      const VertexInput v1{m_BunnyNormalizedVerts[i1], m_BunnyMesh->normals[i1],
+                           m_BunnyMesh->uvs[i1]};
+      const VertexInput v2{m_BunnyNormalizedVerts[i2], m_BunnyMesh->normals[i2],
+                           m_BunnyMesh->uvs[i2]};
 
-      Vector3 screen0{};
-      Vector3 screen1{};
-      Vector3 screen2{};
-      if (!ProjectWorldPointToScreen(world0, screen0) ||
-          !ProjectWorldPointToScreen(world1, screen1) ||
-          !ProjectWorldPointToScreen(world2, screen2))
-      {
-        continue;
-      }
+      const VertexOutput out0 =
+          m_BasicLitShader.VertexShader(v0, m_BasicLitShaderUniforms);
+      const VertexOutput out1 =
+          m_BasicLitShader.VertexShader(v1, m_BasicLitShaderUniforms);
+      const VertexOutput out2 =
+          m_BasicLitShader.VertexShader(v2, m_BasicLitShaderUniforms);
 
-      if (debugPoints)
-      {
-        DrawPoint(static_cast<int>(screen0.x), static_cast<int>(screen0.y),
-                  screen0.z, PackAARRGGBB(0xFFFFFFFF));
-        DrawPoint(static_cast<int>(screen1.x), static_cast<int>(screen1.y),
-                  screen1.z, PackAARRGGBB(0xFFFFFFFF));
-        DrawPoint(static_cast<int>(screen2.x), static_cast<int>(screen2.y),
-                  screen2.z, PackAARRGGBB(0xFFFFFFFF));
-        continue;
-      }
-
-      const uint32_t fillColor = ShadeBunnyFace(world0, world1, world2);
-      DrawTri(screen2, screen1, screen0, fillColor, true);
+      DrawShaderTri(out2, out1, out0, m_BasicLitShaderUniforms,
+                    m_BasicLitShader, true);
     }
+  }
+
+  void RenderTriangle() {
+    
   }
 
 private:
@@ -707,14 +548,13 @@ private:
 
   float m_RotateRadian{0.0f};
 
-  Mesh *m_SimpleCubeMesh{nullptr};
-  std::vector<Vector3> m_SimpleCubeNormalizedVerts;
-  Vector3 m_SimpleCubeCenter{0.0f, 0.0f, 0.0f};
-  float m_SimpleCubeScale{1.0f};
-  float m_SimpleCubeRotateRadian{0.0f};
-
   Mesh *m_BunnyMesh{nullptr};
   std::vector<Vector3> m_BunnyNormalizedVerts;
   Vector3 m_BunnyCenter{0.0f, 0.0f, 0.0f};
   float m_BunnyScale{1.0f};
+
+  // Using BasicLitShader
+  Vector3 m_LightDir{-0.45f, 0.80f, -0.40f};
+  BasicLitShader m_BasicLitShader;
+  ShaderUniforms m_BasicLitShaderUniforms;
 };
