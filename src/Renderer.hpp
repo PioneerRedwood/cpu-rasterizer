@@ -109,7 +109,8 @@ public:
     ClearBuffers();
 
     //RenderBunnyMesh(m_BasicLitShader, m_BasicLitShaderUniforms);
-    RenderBunnyMesh(m_PhongShader, m_PhongShaderUniforms);
+//    RenderBunnyMesh(m_PhongShader, m_PhongShaderUniforms);
+    RenderBunnyMesh(m_BlinnPhongShader, m_BlinnPhongShaderUniforms);
 
     SDL_UpdateTexture(m_MainTexture, nullptr, m_Framebuffer,
                       m_Width * static_cast<int>(sizeof(uint32_t)));
@@ -461,6 +462,8 @@ private:
         m_BunnyNormalizedVerts[i] =
             (m_BunnyMesh->verts[i] - m_BunnyCenter) * m_BunnyScale;
       }
+        
+        m_BunnyMesh->tga = m_TextureLoader->LoadTGATextureWithName(m_Renderer, "numbered_checker.tga");
     }
   }
 
@@ -533,11 +536,15 @@ private:
 
   Vector3 m_LightDir{-0.45f, 0.80f, -0.40f};
   
-  // Using BasicLitShader
-  BasicLitShader m_BasicLitShader;
-  ShaderUniforms m_BasicLitShaderUniforms;
+//  // Using BasicLitShader
+//  BasicLitShader m_BasicLitShader;
+//  ShaderUniforms m_BasicLitShaderUniforms;
+//
+//  // Using PhongShader
+//  PhongShader m_PhongShader;
+//  ShaderUniforms m_PhongShaderUniforms;
 
-  // Using PhongShader
-  PhongShader m_PhongShader;
-  ShaderUniforms m_PhongShaderUniforms;
+    // Using BlinnPhongShader
+  BlinnPhongShader m_BlinnPhongShader;
+  ShaderUniforms m_BlinnPhongShaderUniforms;
 };

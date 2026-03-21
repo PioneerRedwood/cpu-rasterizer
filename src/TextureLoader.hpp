@@ -136,10 +136,10 @@ public:
           continue;
         }
 
-        if (!tga->CreateTexture(renderer, supportedTextureFormat))
-        {
-          LogF("[DEBUG] Create texture has failed ");
-        }
+//        if (!tga->CreateTexture(renderer, supportedTextureFormat))
+//        {
+//          LogF("[DEBUG] Create texture has failed ");
+//        }
         m_LoadedTga.push_back(tga);
         return tga;
       }

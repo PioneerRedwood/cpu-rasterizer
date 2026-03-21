@@ -111,30 +111,10 @@ public:
     }
 };
 
-class PhongShader : public Shader {
+class PhongShader : public BasicLitShader {
 public:
     VertexOutput VertexShader(const VertexInput& input, const ShaderUniforms& uniforms) const override {
-        VertexOutput output;
-
-        // Transform position to world space
-        Vector4 worldPos = uniforms.model * Vector4(input.position.x, input.position.y, input.position.z, 1.0f);
-        output.worldPosition = Vector3(worldPos.x, worldPos.y, worldPos.z);
-
-        // Transform to clip space
-        output.clipPosition = uniforms.projection * (uniforms.view * worldPos);
-
-        // Transform normal to world space (ignore translation)
-        Vector4 worldNormal = uniforms.model * Vector4(input.normal.x, input.normal.y, input.normal.z, 0.0f);
-        output.normal = Vector3(worldNormal.x, worldNormal.y, worldNormal.z).Normalize();
-
-        // Pass through UV
-        output.uv = input.uv;
-
-        // Store inverse W for perspective-correct interpolation
-        output.invW =
-            (std::abs(output.clipPosition.w) > 1e-6f) ? (1.0f / output.clipPosition.w) : 0.0f;
-
-        return output;
+        return BasicLitShader::VertexShader(input, uniforms);
     }
 
     Color PixelShader(const PixelInput& input, const ShaderUniforms& uniforms) const override {
@@ -163,6 +143,45 @@ public:
             baseColor = uniforms.texture->Sample(input.uv.x, input.uv.y);
         }
 
+        Color finalColor;
+        finalColor.r = static_cast<uint8_t>(std::clamp(baseColor.r * light, 0.0f, 255.0f));
+        finalColor.g = static_cast<uint8_t>(std::clamp(baseColor.g * light, 0.0f, 255.0f));
+        finalColor.b = static_cast<uint8_t>(std::clamp(baseColor.b * light, 0.0f, 255.0f));
+        finalColor.a = baseColor.a;
+        return finalColor;
+    }
+};
+
+class BlinnPhongShader : public BasicLitShader {
+public:
+    VertexOutput VertexShader(const VertexInput& input, const ShaderUniforms& uniforms) const override {
+        return BasicLitShader::VertexShader(input, uniforms);
+    }
+    
+    Color PixelShader(const PixelInput& input, const ShaderUniforms& uniforms) const override {
+        const Vector3 n = input.normal.Normalize();
+        const Vector3 l = uniforms.lightDir.Normalize();
+        const Vector3 v = (uniforms.cameraPosition - input.worldPosition).Normalize();
+        
+        const float ndotl = std::max(0.0f, math::DotProduct(n, l));
+        // Main difference from normal Phong shading
+        const Vector3 h = (l + v).Normalize();
+        
+        const float ambient = 0.2f;
+        const float diffuse = 0.8f * ndotl;
+        const float specularStrength = 0.35f;
+        const float shininess = 32.0f;
+        
+        const float specular = (ndotl > 0.0f) ?
+            specularStrength * std::pow(std::max(0.0f, math::DotProduct(n, h)), shininess)
+            : 0.0f;
+        const float light = std::min(1.0f, ambient + diffuse + specular);
+        
+        Color baseColor = Color(0xFFFFFFFF);
+        if(uniforms.texture != nullptr) {
+            baseColor = uniforms.texture->Sample(input.uv.x, input.uv.y);
+        }
+        
         Color finalColor;
         finalColor.r = static_cast<uint8_t>(std::clamp(baseColor.r * light, 0.0f, 255.0f));
         finalColor.g = static_cast<uint8_t>(std::clamp(baseColor.g * light, 0.0f, 255.0f));
