@@ -30,8 +30,16 @@ struct ShaderUniforms {
     Matrix4x4 model;
     Matrix4x4 view;
     Matrix4x4 projection;
+    
     Vector3 lightDir;
     Vector3 cameraPosition;
+    
+    float ambientStrength;
+    float diffuseStrength;
+    float specularStrength;
+    float shininess;
+    
+    Color specularColor;
     const TGA* texture { nullptr };
 };
 
@@ -127,27 +135,25 @@ public:
         const float ndotl = std::max(0.0f, math::DotProduct(n, l));
         const Vector3 r = (n * 2 * math::DotProduct(n, l) - l).Normalize();
 
-
         // ambient + kd * max(dot(N, L), 0) + ks * pow(max(dot(R, V), 0), shininess)
-        const float ambient = 0.2f;
-        const float diffuse = 0.8f * ndotl;
-        const float specularStrength = 0.35f;
-        const float shininess = 32.0f;
-        const float specular = (ndotl > 0.0f) ?
-            specularStrength * std::pow(std::max(0.0f, math::DotProduct(r, v)), shininess) : 0.0f;
-        
-        const float light = std::min(1.0f, ambient + diffuse + specular);
+        const float diffuse = uniforms.diffuseStrength * ndotl;
 
-        Color baseColor = Color(0xFFFFFFFF);
-        if(uniforms.texture != nullptr) {
-            baseColor = uniforms.texture->Sample(input.uv.x, input.uv.y);
-        }
+        const float specular = (ndotl > 0.0f) ?
+            uniforms.specularStrength * std::pow(std::max(0.0f, math::DotProduct(r, v)), uniforms.shininess) : 0.0f;
+        
+        Color texColor = (uniforms.texture != nullptr) ?
+            uniforms.texture->Sample(input.uv.x, input.uv.y) : Color(0xFFFFFFFF);
+        Vector3 albedo = { texColor.r / 255.0f, texColor.g / 255.0f, texColor.b / 255.0f };
+        Vector3 specColor = { uniforms.specularColor.r / 255.0f,
+            uniforms.specularColor.g / 255.0f, uniforms.specularColor.b / 255.0f };
+        
+        Vector3 floatColor = albedo * (uniforms.ambientStrength + diffuse) + specColor * specular;
 
         Color finalColor;
-        finalColor.r = static_cast<uint8_t>(std::clamp(baseColor.r * light, 0.0f, 255.0f));
-        finalColor.g = static_cast<uint8_t>(std::clamp(baseColor.g * light, 0.0f, 255.0f));
-        finalColor.b = static_cast<uint8_t>(std::clamp(baseColor.b * light, 0.0f, 255.0f));
-        finalColor.a = baseColor.a;
+        finalColor.r = static_cast<uint8_t>(std::clamp(floatColor.x, 0.0f, 1.0f) * 255.0f);
+        finalColor.g = static_cast<uint8_t>(std::clamp(floatColor.y, 0.0f, 1.0f) * 255.0f);
+        finalColor.b = static_cast<uint8_t>(std::clamp(floatColor.z, 0.0f, 1.0f) * 255.0f);
+        finalColor.a = texColor.a;
         return finalColor;
     }
 };
@@ -164,29 +170,29 @@ public:
         const Vector3 v = (uniforms.cameraPosition - input.worldPosition).Normalize();
         
         const float ndotl = std::max(0.0f, math::DotProduct(n, l));
+        
         // Main difference from normal Phong shading
         const Vector3 h = (l + v).Normalize();
         
-        const float ambient = 0.2f;
-        const float diffuse = 0.8f * ndotl;
-        const float specularStrength = 0.35f;
-        const float shininess = 32.0f;
-        
+        const float diffuse = uniforms.diffuseStrength * ndotl;
+
         const float specular = (ndotl > 0.0f) ?
-            specularStrength * std::pow(std::max(0.0f, math::DotProduct(n, h)), shininess)
+            uniforms.specularStrength * std::pow(std::max(0.0f, math::DotProduct(n, h)), uniforms.shininess)
             : 0.0f;
-        const float light = std::min(1.0f, ambient + diffuse + specular);
         
-        Color baseColor = Color(0xFFFFFFFF);
-        if(uniforms.texture != nullptr) {
-            baseColor = uniforms.texture->Sample(input.uv.x, input.uv.y);
-        }
+        Color texColor = (uniforms.texture != nullptr) ?
+            uniforms.texture->Sample(input.uv.x, input.uv.y) : Color(0xFFFFFFFF);
+        Vector3 albedo = { texColor.r / 255.0f, texColor.g / 255.0f, texColor.b / 255.0f };
+        Vector3 specColor = { uniforms.specularColor.r / 255.0f,
+            uniforms.specularColor.g / 255.0f, uniforms.specularColor.b / 255.0f };
         
+        Vector3 floatColor = albedo * (uniforms.ambientStrength + diffuse) + specColor * specular;
+
         Color finalColor;
-        finalColor.r = static_cast<uint8_t>(std::clamp(baseColor.r * light, 0.0f, 255.0f));
-        finalColor.g = static_cast<uint8_t>(std::clamp(baseColor.g * light, 0.0f, 255.0f));
-        finalColor.b = static_cast<uint8_t>(std::clamp(baseColor.b * light, 0.0f, 255.0f));
-        finalColor.a = baseColor.a;
+        finalColor.r = static_cast<uint8_t>(std::clamp(floatColor.x, 0.0f, 1.0f) * 255.0f);
+        finalColor.g = static_cast<uint8_t>(std::clamp(floatColor.y, 0.0f, 1.0f) * 255.0f);
+        finalColor.b = static_cast<uint8_t>(std::clamp(floatColor.z, 0.0f, 1.0f) * 255.0f);
+        finalColor.a = texColor.a;
         return finalColor;
     }
 };

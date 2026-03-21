@@ -30,6 +30,10 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     CPURASTERIZER_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    CPURASTERIZER_RESOURCE_DIR="${CMAKE_SOURCE_DIR}/resources"
+)
+
 # Settings for platform
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     # Windows specific settings (Visual Studio)
