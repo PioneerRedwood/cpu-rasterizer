@@ -173,6 +173,13 @@ void SetupCameraMatrix(Matrix4x4& out, const Vector3& eye, const Vector3& at, co
 void SetupPerspectiveProjectionMatrix(Matrix4x4& out, float fovY, float aspect, float near, float far);
 
 /**
+ * @brief 직교 투영 프러스텀 매트릭스 반환
+ */
+void SetupOrthographicProjectionMatrix(Matrix4x4& out, float left, float right,
+                                       float bottom, float top, float near,
+                                       float far);
+
+/**
  * @brief 뷰포트 행렬 구성
  * near, far는 기본값 각각 0, 1 사용
  */

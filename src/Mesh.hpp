@@ -1,14 +1,9 @@
 #pragma once
 
-#include <cstdint>
-#include <fstream>
-#include <sstream>
-#include <string>
-#include <unordered_map>
-#include <vector>
-
 #include "Math.hpp"
 #include "TGA.hpp"
+
+#include <vector>
 
 struct Mesh
 {

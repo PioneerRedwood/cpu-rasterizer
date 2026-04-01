@@ -446,6 +446,18 @@ void SetupPerspectiveProjectionMatrix(Matrix4x4& out, float fovY, float aspect, 
   out.m44 = 0.0f;
 }
 
+void SetupOrthographicProjectionMatrix(Matrix4x4& out, float left, float right,
+                                       float bottom, float top, float near,
+                                       float far) {
+  out.m11 = 2.0f / (right - left);
+  out.m22 = 2.0f / (top - bottom);
+  out.m33 = 1.0f / (far - near);
+  out.m41 = -(right + left) / (right - left);
+  out.m42 = -(top + bottom) / (top - bottom);
+  out.m43 = -near / (far - near);
+  out.m44 = 1.0f;
+}
+
 void SetupViewportMatrix(Matrix4x4& out, float x, float y, float w, float h, float near, float far) {
   /*
   * https://www.songho.ca/opengl/gl_viewport.html

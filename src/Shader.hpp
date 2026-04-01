@@ -5,6 +5,7 @@
 #include "Color.hpp"
 #include "Math.hpp"
 #include "TGA.hpp"
+#include "render/DepthTarget.hpp"
 
 struct VertexInput {
     Vector3 position;
@@ -30,6 +31,9 @@ struct ShaderUniforms {
     Matrix4x4 model;
     Matrix4x4 view;
     Matrix4x4 projection;
+    Matrix4x4 lightView;
+    Matrix4x4 lightProjection;
+    Matrix4x4 shadowViewport;
     
     Vector3 lightDir;
     Vector3 cameraPosition;
@@ -38,10 +42,59 @@ struct ShaderUniforms {
     float diffuseStrength;
     float specularStrength;
     float shininess;
+    float shadowBias { 0.003f };
     
     Color specularColor;
     const TGA* texture { nullptr };
+    const render::DepthTarget* shadowMap { nullptr };
 };
+
+inline float ComputeShadowVisibility(const PixelInput& input,
+                                     const ShaderUniforms& uniforms) {
+    if (uniforms.shadowMap == nullptr || uniforms.shadowMap->data.empty()) {
+        return 1.0f;
+    }
+
+    Vector4 worldPos(input.worldPosition.x, input.worldPosition.y,
+                     input.worldPosition.z, 1.0f);
+    Vector4 lightClip =
+        uniforms.lightProjection * (uniforms.lightView * worldPos);
+    if (lightClip.w <= 1e-6f) {
+        return 1.0f;
+    }
+
+    lightClip.PerspectiveDivide();
+    if (!std::isfinite(lightClip.x) || !std::isfinite(lightClip.y) ||
+        !std::isfinite(lightClip.z)) {
+        return 1.0f;
+    }
+
+    if (lightClip.x < -1.0f || lightClip.x > 1.0f ||
+        lightClip.y < -1.0f || lightClip.y > 1.0f ||
+        lightClip.z < 0.0f || lightClip.z > 1.0f) {
+        return 1.0f;
+    }
+
+    const Vector4 shadowScreen = uniforms.shadowViewport * lightClip;
+    const int sx = std::clamp(static_cast<int>(shadowScreen.x), 0,
+                              uniforms.shadowMap->width - 1);
+    const int sy = std::clamp(static_cast<int>(shadowScreen.y), 0,
+                              uniforms.shadowMap->height - 1);
+    const float closestDepth =
+        uniforms.shadowMap->data[sx + sy * uniforms.shadowMap->width];
+    if (closestDepth >= 1.0f) {
+        return 1.0f;
+    }
+
+    const float ndotl = std::max(
+        0.0f,
+        math::DotProduct(input.normal.Normalize(), uniforms.lightDir.Normalize()));
+    const float bias =
+        std::max(uniforms.shadowBias * (1.0f - ndotl),
+                 uniforms.shadowBias * 0.25f);
+
+    return (lightClip.z - bias > closestDepth) ? 0.0f : 1.0f;
+}
 
 class Shader {
 public:
@@ -101,7 +154,8 @@ public:
     Color PixelShader(const PixelInput& input, const ShaderUniforms& uniforms) const override {
         // Compute diffuse lighting
         float diffuse = std::max(0.0f, math::DotProduct(input.normal.Normalize(), uniforms.lightDir.Normalize()));
-        float light = 0.2f + diffuse * 0.8f;
+        const float shadowVisibility = ComputeShadowVisibility(input, uniforms);
+        float light = 0.2f + diffuse * 0.8f * shadowVisibility;
 
         // Sample texture if available
         Color baseColor = Color(0xFFFFFFFF); // default white
@@ -130,6 +184,7 @@ public:
         const Vector3 n = input.normal.Normalize();
         const Vector3 l = uniforms.lightDir.Normalize();
         const Vector3 v = (uniforms.cameraPosition - input.worldPosition).Normalize();
+        const float shadowVisibility = ComputeShadowVisibility(input, uniforms);
         
         // R = normalize(2 * dot(N, L) * N - L)
         const float ndotl = std::max(0.0f, math::DotProduct(n, l));
@@ -147,7 +202,8 @@ public:
         Vector3 specColor = { uniforms.specularColor.r / 255.0f,
             uniforms.specularColor.g / 255.0f, uniforms.specularColor.b / 255.0f };
         
-        Vector3 floatColor = albedo * (uniforms.ambientStrength + diffuse) + specColor * specular;
+        Vector3 floatColor = albedo * uniforms.ambientStrength +
+            (albedo * diffuse + specColor * specular) * shadowVisibility;
 
         Color finalColor;
         finalColor.r = static_cast<uint8_t>(std::clamp(floatColor.x, 0.0f, 1.0f) * 255.0f);
@@ -168,6 +224,7 @@ public:
         const Vector3 n = input.normal.Normalize();
         const Vector3 l = uniforms.lightDir.Normalize();
         const Vector3 v = (uniforms.cameraPosition - input.worldPosition).Normalize();
+        const float shadowVisibility = ComputeShadowVisibility(input, uniforms);
         
         const float ndotl = std::max(0.0f, math::DotProduct(n, l));
         
@@ -186,7 +243,8 @@ public:
         Vector3 specColor = { uniforms.specularColor.r / 255.0f,
             uniforms.specularColor.g / 255.0f, uniforms.specularColor.b / 255.0f };
         
-        Vector3 floatColor = albedo * (uniforms.ambientStrength + diffuse) + specColor * specular;
+        Vector3 floatColor = albedo * uniforms.ambientStrength +
+            (albedo * diffuse + specColor * specular) * shadowVisibility;
 
         Color finalColor;
         finalColor.r = static_cast<uint8_t>(std::clamp(floatColor.x, 0.0f, 1.0f) * 255.0f);

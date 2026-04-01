@@ -11,7 +11,7 @@ set(CMAKE_BUILD_TYPE Debug)
 set(CXX_FLAGS "-Wall")
 
 # header files
-file(GLOB HEADER_FILES
+file(GLOB_RECURSE HEADER_FILES
     ${CMAKE_SOURCE_DIR}/src/*.hpp
 )
 

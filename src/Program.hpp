@@ -79,8 +79,8 @@ class Program {
                      (double)SDL_GetPerformanceFrequency());
   }
 
-  void HandleKeyInput(SDL_Event event) {
-		renderer->HandleKeyInput(event.key.keysym.sym);
+  void HandleKeyInput(const SDL_Event& event) {
+    renderer->HandleKeyInput(event);
   }
 
   void HandlePollEvent() {
