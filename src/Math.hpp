@@ -38,6 +38,7 @@ struct Vector3 {
   float z;
 
   Vector3();
+  Vector3(float a);
   Vector3(float x, float y, float z);
 
   Vector3(const Vector3& other);
@@ -45,6 +46,7 @@ struct Vector3 {
 
   Vector3 operator+(const Vector3& other) const;
   Vector3 operator*(float scalar) const;
+  Vector3 operator*(const Vector3& other) const;
   Vector3 operator-(const Vector3& other) const;
   Vector3 operator/(const Vector3& other) const;
   Vector3 operator/(float value) const;
@@ -53,6 +55,8 @@ struct Vector3 {
   /// @brief 각 값을 정규화
   /// @return 정규화된 벡터 반환
   Vector3 Normalize() const;
+
+  float Length() const;
 
   std::string ToString() const;
 };
@@ -200,5 +204,15 @@ uint32_t LerpColor(uint32_t from, uint32_t to, float t);
  * edge == 0 : 점P는 선분에 위치
  */
 float EdgeFunction(const Vector2& a, const Vector2& b, float x, float y);
+
+float Lerp(float a, float b, float t);
+
+Vector3 Lerp(const Vector3& a, const Vector3& b, float t);
+
+float Pow(float x, float e);
+
+Vector3 Pow(const Vector3& v, float e);
+
+Vector3 Pow(const Vector3& v, const Vector3& e);
 
 } // namespace math

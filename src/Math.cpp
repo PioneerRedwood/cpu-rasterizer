@@ -46,6 +46,8 @@ Vector2 Vector2::Normalized() const {
 
 Vector3::Vector3() : x(0.0f), y(0.0f), z(0.0f) {}
 
+Vector3::Vector3(float a) : x(a), y(a), z(a) {}
+
 Vector3::Vector3(float x, float y, float z)
 : x(x), y(y), z(z) {}
 
@@ -65,6 +67,10 @@ Vector3 Vector3::operator+(const Vector3& other) const {
 
 Vector3 Vector3::operator*(float scalar) const {
   return { this->x * scalar, this->y * scalar, this->z * scalar };
+}
+
+Vector3 Vector3::operator*(const Vector3& other) const {
+  return { this->x * other.x, this->y * other.y, this->z * other.z };
 }
 
 Vector3 Vector3::operator-(const Vector3& other) const {
@@ -87,6 +93,10 @@ Vector3 Vector3::Normalize() const {
   const float mag = (float)std::sqrt(this->x * this->x + this->y * this->y +
                                      this->z * this->z);
   return (*this) / mag;
+}
+
+float Vector3::Length() const {
+  return std::sqrt(this->x * this->x + this->y * this->y + this->z * this->z);
 }
 
 std::string Vector3::ToString() const {
@@ -487,6 +497,39 @@ uint32_t LerpColor(uint32_t from, uint32_t to, float t) {
 
 float EdgeFunction(const Vector2& a, const Vector2& b, float x, float y) {
   return (x - a.x) * (b.y - a.y) - (y - a.y) * (b.x - a.x);
+}
+
+float Lerp(float a, float b, float t)
+{
+  return a + (b - a) * t;
+}
+
+Vector3 Lerp(const Vector3& a, const Vector3& b, float t)
+{
+  return a + (b - a) * t;
+}
+
+float Pow(float x, float e)
+{
+  return std::pow(x, e);
+}
+
+Vector3 Pow(const Vector3& v, float e)
+{
+  return {
+    std::pow(std::max(v.x, 0.0f), e),
+    std::pow(std::max(v.y, 0.0f), e),
+    std::pow(std::max(v.z, 0.0f), e)
+  };
+}
+
+Vector3 Pow(const Vector3& v, const Vector3& e)
+{
+  return {
+    std::pow(std::max(v.x, 0.0f), e.x),
+    std::pow(std::max(v.y, 0.0f), e.y),
+    std::pow(std::max(v.z, 0.0f), e.z)
+  };
 }
 
 } // namespace math

@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 
+#include "Material.hpp"
 #include "ResourceLoader.hpp"
 #include "WorldCamera.hpp"
 #include "render/DepthTarget.hpp"
@@ -67,7 +68,7 @@ private:
 
   void DrawRenderable(const Renderable &renderable);
 
-  void BuildUniforms(const Renderable &renderable, ShaderUniforms& uniforms) const;
+  void BuildUniforms(const Renderable &renderable, ShaderUniforms &uniforms) const;
 
   void DrawMesh(const Mesh &mesh, const Matrix4x4 &modelMatrix,
                 const Shader *shader, const ShaderUniforms &uniforms);
@@ -77,8 +78,6 @@ private:
 
   void ProcessTriangle(const Mesh &mesh, size_t index, const Matrix4x4 &modelMatrix,
                        const Shader *shader, const ShaderUniforms &uniforms);
-
-  void RenderShadowMapScene();
 
 private:
   int m_Width{0};
@@ -106,9 +105,15 @@ private:
 
   Renderable *m_Bunny{nullptr};
   Renderable *m_Plane{nullptr};
-
-  BlinnPhongShader m_BlinnPhongShader;
-  ShaderUniforms m_BlinnPhongShaderUniforms;
+#if 0
+  BlinnPhongShader m_Shader;
+  ShaderUniforms m_Uniforms;
+#else
+  PBRShader m_Shader;
+  PBRShaderUniforms m_Uniforms;
+  Material m_Material;
+  Vector3 m_DirectionalLightPosition;
+#endif
 
 private:
   // Depth map and shadow settings
