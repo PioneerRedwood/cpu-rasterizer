@@ -102,6 +102,7 @@ elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     )
 
     # Find macOS frameworks
+    find_library(OPENGL_FRAMEWORK OpenGL REQUIRED)
     find_library(CORE_FOUNDATION CoreFoundation REQUIRED)
     find_library(FOUNDATION Foundation REQUIRED)
     find_library(CORE_AUDIO CoreAudio REQUIRED)
@@ -150,6 +151,7 @@ elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     target_link_libraries(${PROJECT_NAME}
         lib-sdl2
         lib-sdl2main
+        ${OPENGL_FRAMEWORK}
         ${SDL2_LIBRARIES}
         ${CORE_FOUNDATION}
         ${FOUNDATION}

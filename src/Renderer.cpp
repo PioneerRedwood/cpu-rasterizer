@@ -1,7 +1,8 @@
 #include "Renderer.hpp"
 
 Renderer::Renderer(SDL_Window *window, int width, int height)
-    : m_Width(width),
+    : IRenderer(window, width, height),
+      m_Width(width),
       m_Height(height),
       m_ZBuffer(width, height),
       m_ShadowDepth(width, height)

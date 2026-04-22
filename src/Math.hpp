@@ -215,4 +215,6 @@ Vector3 Pow(const Vector3& v, float e);
 
 Vector3 Pow(const Vector3& v, const Vector3& e);
 
+Matrix4x4 Transpose(const Matrix4x4& m);
+
 } // namespace math

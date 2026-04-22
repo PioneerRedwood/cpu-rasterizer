@@ -532,4 +532,25 @@ Vector3 Pow(const Vector3& v, const Vector3& e)
   };
 }
 
+Matrix4x4 Transpose(const Matrix4x4& m) 
+{
+  /*
+  m11 m12 m13 m14  ->  m11 m21 m31 m14 
+  m21 m22 m23 m24  ->  m12 m22 m32 m42 
+  m31 m32 m33 m34  ->  m13 m23 m33 m43 
+  m41 m42 m43 m44  ->  m14 m24 m34 m44 
+  */
+ Matrix4x4 o = m;
+
+ o.m12 = m.m21;
+ o.m13 = m.m31;
+ o.m14 = m.m41;
+
+ o.m23 = m.m32;
+ o.m24 = m.m42;
+
+ o.m34 = m.m43;
+ return o;
+}
+
 } // namespace math

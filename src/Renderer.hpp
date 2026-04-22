@@ -6,22 +6,23 @@
 #include <cmath>
 #include <cstdint>
 
+#include "IRenderer.hpp"
 #include "Material.hpp"
 #include "ResourceLoader.hpp"
 #include "WorldCamera.hpp"
 #include "render/DepthTarget.hpp"
 #include "TriangleSetup.hpp"
 
-class Renderer
+class Renderer : public IRenderer
 {
 public:
   Renderer(SDL_Window *window, int width, int height);
 
   ~Renderer();
 
-  void Render(double delta);
+  void Render(double delta) override;
 
-  void HandleKeyInput(const SDL_Event &event);
+  void HandleKeyInput(const SDL_Event &event) override;
 
 private:
   void BeginFrame();
