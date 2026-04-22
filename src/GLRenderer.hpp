@@ -1,10 +1,15 @@
 #pragma once 
 
+#include "GLMath.hpp"
 #include "IRenderer.hpp"
+#include "Mesh.hpp"
+#include "ResourceLoader.hpp"
+#include "TGA.hpp"
 #include "WorldCamera.hpp"
 
 #include <OpenGL/gl3.h>
 #include <OpenGL/gl3ext.h>
+#include <memory>
 
 class GLRenderer : public IRenderer 
 {
@@ -37,14 +42,31 @@ private:
 
   void UpdateScenes();
 
+  struct GeometryBuffer
+  {
+    GLuint vao { 0 };
+    GLuint vbo { 0 };
+    GLuint ebo { 0 };
+    GLsizei indexCount { 0 };
+  };
+
 private:
   bool CreateAndCompileShaders();
 
-  bool CreateGPUBuffers();
+  bool CreateGeometryBuffers(GeometryBuffer& geometry);
 
   bool LinkProgram();
 
-  void BuildCube();
+  bool UploadMeshToGeometry(const Mesh& mesh, GeometryBuffer& geometry);
+
+  bool LoadSceneMeshes();
+
+  bool LoadCheckerTexture();
+
+  void DrawGeometry(const GeometryBuffer& geometry,
+                    const glmath::Mat4& modelMatrix,
+                    const Vector3& albedo,
+                    bool useTexture);
 
 private:
   SDL_Window* m_Window { nullptr };
@@ -52,14 +74,33 @@ private:
   int m_Height { 0 };
 
   WorldCamera m_Camera;
+  glmath::Mat4 m_ViewMatrix { glmath::Identity() };
+  glmath::Mat4 m_ProjectionMatrix { glmath::Identity() };
+  glmath::Mat4 m_PlaneModelMatrix { glmath::Identity() };
+  glmath::Mat4 m_BunnyModelMatrix { glmath::Identity() };
+  float m_ModelRotationYDegrees { 0.0f };
+  std::unique_ptr<Mesh> m_CubeMesh;
+  std::unique_ptr<Mesh> m_BunnyMesh;
 
-  GLuint m_Vao { 0 };
-  GLuint m_Vbo { 0 };
-  GLuint m_Ebo { 0 };
+  GeometryBuffer m_CubeGeometry;
+  GeometryBuffer m_BunnyGeometry;
   GLuint m_VertexShader { 0 };
   GLuint m_FragmentShader { 0 };
   GLuint m_RenderCubeProgram { 0 };
-  GLsizei m_CubeIndexCount { 0 };
+  GLuint m_CheckerTexture { 0 };
+  GLint m_ModelLocation { -1 };
+  GLint m_ViewLocation { -1 };
+  GLint m_ProjectionLocation { -1 };
+  GLint m_LightDirLocation { -1 };
+  GLint m_CameraPositionLocation { -1 };
+  GLint m_AmbientStrengthLocation { -1 };
+  GLint m_DiffuseStrengthLocation { -1 };
+  GLint m_SpecularStrengthLocation { -1 };
+  GLint m_ShininessLocation { -1 };
+  GLint m_SpecularColorLocation { -1 };
+  GLint m_AlbedoLocation { -1 };
+  GLint m_UseTextureLocation { -1 };
+  GLint m_DiffuseTextureLocation { -1 };
 
   // Shaders, Matrices
   // Renderable objects (bunny, plane or others)

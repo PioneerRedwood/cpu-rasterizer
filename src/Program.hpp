@@ -90,6 +90,10 @@ class Program {
 #else
     m_Renderer = new GLRenderer(m_Window, width, height);
 #endif
+
+    m_CurrentTime = SDL_GetPerformanceCounter();
+    m_LastTime = m_CurrentTime;
+    m_Delta = 0.0;
     return 0;
   }
 

@@ -7,6 +7,7 @@
 #include "Renderable.hpp"
 
 #include <SDL.h>
+#include <memory>
 
 class ResourceLoader
 {
@@ -35,6 +36,20 @@ public:
 
     Mesh *LoadMesh(const char *filepath)
     {
+        std::unique_ptr<Mesh> mesh = LoadMeshStandalone(filepath, m_ResourceDirectoryPrefix);
+        if (!mesh)
+        {
+            return nullptr;
+        }
+
+        m_LoadedMesh.push_back(mesh.get());
+        return mesh.release();
+    }
+
+    static std::unique_ptr<Mesh> LoadMeshStandalone(
+        const char *filepath,
+        const std::string &resourceDirectoryPrefix = std::string(CPURASTERIZER_RESOURCE_DIR))
+    {
         if (filepath == nullptr)
         {
             return nullptr;
@@ -43,7 +58,7 @@ public:
         LogF("[ResourceLoader] Attempting to load mesh from %s", filepath);
 
         namespace fs = std::filesystem;
-        const fs::path meshPath(m_ResourceDirectoryPrefix + "/" + filepath);
+        const fs::path meshPath(resourceDirectoryPrefix + "/" + filepath);
 
         FILE *fp = fopen(meshPath.string().c_str(), "r");
         if (fp == nullptr)
@@ -52,7 +67,7 @@ public:
             return nullptr;
         }
 
-        Mesh *mesh = new Mesh();
+        std::unique_ptr<Mesh> mesh = std::make_unique<Mesh>();
         using Vec3 = std::vector<Vector3>;
         using Vec2 = std::vector<Vector2>;
         Vec3 rawPos;
@@ -153,9 +168,9 @@ public:
                     continue;
                 }
 
-                AddVertex(mesh, rawPos, rawUv, rawNorm, v[0], t[0], n[0]);
-                AddVertex(mesh, rawPos, rawUv, rawNorm, v[1], t[1], n[1]);
-                AddVertex(mesh, rawPos, rawUv, rawNorm, v[2], t[2], n[2]);
+                AddVertex(mesh.get(), rawPos, rawUv, rawNorm, v[0], t[0], n[0]);
+                AddVertex(mesh.get(), rawPos, rawUv, rawNorm, v[1], t[1], n[1]);
+                AddVertex(mesh.get(), rawPos, rawUv, rawNorm, v[2], t[2], n[2]);
                 mesh->hasUVs = mesh->hasUVs || (t[0] > 0 || t[1] > 0 || t[2] > 0);
                 mesh->hasNormals = mesh->hasNormals || (n[0] > 0 || n[1] > 0 || n[2] > 0);
             }
@@ -165,7 +180,6 @@ public:
             }
         }
 
-        m_LoadedMesh.push_back(mesh);
         return mesh;
     }
 
