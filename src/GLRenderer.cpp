@@ -1,6 +1,7 @@
 #include "GLRenderer.hpp"
 #include "Log.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <filesystem>
 
@@ -37,30 +38,88 @@ in vec3 vWorldPosition;
 in vec3 vWorldNormal;
 in vec2 vUv;
 
-uniform vec3 uLightDir;
+uniform vec3 uLightPosition;
+uniform vec3 uLightColor;
 uniform vec3 uCameraPosition;
-uniform float uAmbientStrength;
-uniform float uDiffuseStrength;
-uniform float uSpecularStrength;
-uniform float uShininess;
-uniform vec3 uSpecularColor;
 uniform vec3 uAlbedo;
+uniform float uMetallic;
+uniform float uRoughness;
+uniform float uAmbientOcclusion;
 uniform int uUseTexture;
 uniform sampler2D uDiffuseTexture;
 
 out vec4 fragColor;
 
+const float PI = 3.14159265359;
+
+float DistributionGGX(vec3 n, vec3 h, float roughness)
+{
+  float a = roughness * roughness;
+  float a2 = a * a;
+  float ndoth = max(dot(n, h), 0.0);
+  float ndoth2 = ndoth * ndoth;
+  float denom = ndoth2 * (a2 - 1.0) + 1.0;
+  return a2 / max(PI * denom * denom, 0.0001);
+}
+
+float GeometrySchlickGGX(float ndotx, float roughness)
+{
+  float r = roughness + 1.0;
+  float k = (r * r) / 8.0;
+  return ndotx / max(ndotx * (1.0 - k) + k, 0.0001);
+}
+
+float GeometrySmith(vec3 n, vec3 v, vec3 l, float roughness)
+{
+  float ndotv = max(dot(n, v), 0.0);
+  float ndotl = max(dot(n, l), 0.0);
+  return GeometrySchlickGGX(ndotv, roughness) *
+         GeometrySchlickGGX(ndotl, roughness);
+}
+
+vec3 FresnelSchlick(float cosTheta, vec3 f0)
+{
+  float x = 1.0 - clamp(cosTheta, 0.0, 1.0);
+  return f0 + (vec3(1.0) - f0) * pow(x, 5.0);
+}
+
+vec3 ACESFilmic(vec3 x)
+{
+  const float a = 2.51;
+  const float b = 0.03;
+  const float c = 2.43;
+  const float d = 0.59;
+  const float e = 0.14;
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
 void main()
 {
   vec3 n = normalize(vWorldNormal);
-  vec3 l = normalize(uLightDir);
   vec3 v = normalize(uCameraPosition - vWorldPosition);
+  vec3 l = normalize(uLightPosition - vWorldPosition);
   vec3 h = normalize(l + v);
-  float ndotl = max(dot(n, l), 0.0);
-  float diffuse = uDiffuseStrength * ndotl;
-  float specular = ndotl > 0.0 ? uSpecularStrength * pow(max(dot(n, h), 0.0), uShininess) : 0.0;
   vec3 baseColor = uUseTexture != 0 ? texture(uDiffuseTexture, vUv).rgb : uAlbedo;
-  vec3 color = baseColor * uAmbientStrength + (baseColor * diffuse + uSpecularColor * specular);
+  float roughness = clamp(uRoughness, 0.04, 1.0);
+  float metallic = clamp(uMetallic, 0.0, 1.0);
+
+  vec3 f0 = mix(vec3(0.04), baseColor, metallic);
+  float ndf = DistributionGGX(n, h, roughness);
+  float geometry = GeometrySmith(n, v, l, roughness);
+  vec3 fresnel = FresnelSchlick(max(dot(h, v), 0.0), f0);
+
+  vec3 numerator = ndf * geometry * fresnel;
+  float denominator = max(4.0 * max(dot(n, v), 0.0) * max(dot(n, l), 0.0), 0.001);
+  vec3 specular = numerator / denominator;
+
+  vec3 ks = fresnel;
+  vec3 kd = (vec3(1.0) - ks) * (1.0 - metallic);
+  float ndotl = max(dot(n, l), 0.0);
+  vec3 lo = (kd * baseColor / PI + specular) * uLightColor * ndotl;
+
+  vec3 ambient = vec3(0.03) * baseColor * uAmbientOcclusion;
+  vec3 color = ACESFilmic(ambient + lo);
+  color = pow(color, vec3(1.0 / 2.2));
   fragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }
 )";
@@ -277,20 +336,13 @@ void GLRenderer::RenderMainPass()
   glUniformMatrix4fv(m_ViewLocation, 1, GL_FALSE, m_ViewMatrix.Data());
   glUniformMatrix4fv(m_ProjectionLocation, 1, GL_FALSE,
                      m_ProjectionMatrix.Data());
-  glUniform3f(m_LightDirLocation, -0.45f, 0.8f, 0.35f);
+  glUniform3f(m_LightPositionLocation, 5.0f, 10.0f, 5.0f);
+  glUniform3f(m_LightColorLocation, 4.0f, 4.0f, 4.0f);
   glUniform3f(m_CameraPositionLocation, m_Camera.eye.x, m_Camera.eye.y,
               m_Camera.eye.z);
-  glUniform1f(m_AmbientStrengthLocation, 0.25f);
-  glUniform1f(m_DiffuseStrengthLocation, 0.8f);
-  glUniform1f(m_SpecularStrengthLocation, 1.4f);
-  glUniform1f(m_ShininessLocation, 8.0f);
-  glUniform3f(m_SpecularColorLocation, 1.0f, 1.0f, 1.0f);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, m_CheckerTexture);
-  glUniform1i(m_DiffuseTextureLocation, 0);
 
-  DrawGeometry(m_CubeGeometry, m_PlaneModelMatrix, {0.42f, 0.44f, 0.46f}, true);
-  DrawGeometry(m_BunnyGeometry, m_BunnyModelMatrix, {0.78f, 0.78f, 0.82f}, false);
+  DrawGeometry(m_CubeGeometry, m_PlaneModelMatrix, m_PlaneMaterial);
+  DrawGeometry(m_BunnyGeometry, m_BunnyModelMatrix, m_BunnyMaterial);
 
   glUseProgram(0);
 }
@@ -326,6 +378,7 @@ void GLRenderer::LoadResources()
   {
     return;
   }
+  SetupMaterials();
   UpdateScenes();
   SetupMatrices();
   glEnable(GL_DEPTH_TEST);
@@ -404,30 +457,27 @@ bool GLRenderer::LinkProgram()
   m_ModelLocation = glGetUniformLocation(m_RenderCubeProgram, "uModel");
   m_ViewLocation = glGetUniformLocation(m_RenderCubeProgram, "uView");
   m_ProjectionLocation = glGetUniformLocation(m_RenderCubeProgram, "uProjection");
-  m_LightDirLocation = glGetUniformLocation(m_RenderCubeProgram, "uLightDir");
+  m_LightPositionLocation =
+      glGetUniformLocation(m_RenderCubeProgram, "uLightPosition");
+  m_LightColorLocation = glGetUniformLocation(m_RenderCubeProgram, "uLightColor");
   m_CameraPositionLocation =
       glGetUniformLocation(m_RenderCubeProgram, "uCameraPosition");
-  m_AmbientStrengthLocation =
-      glGetUniformLocation(m_RenderCubeProgram, "uAmbientStrength");
-  m_DiffuseStrengthLocation =
-      glGetUniformLocation(m_RenderCubeProgram, "uDiffuseStrength");
-  m_SpecularStrengthLocation =
-      glGetUniformLocation(m_RenderCubeProgram, "uSpecularStrength");
-  m_ShininessLocation = glGetUniformLocation(m_RenderCubeProgram, "uShininess");
-  m_SpecularColorLocation =
-      glGetUniformLocation(m_RenderCubeProgram, "uSpecularColor");
   m_AlbedoLocation = glGetUniformLocation(m_RenderCubeProgram, "uAlbedo");
+  m_MetallicLocation = glGetUniformLocation(m_RenderCubeProgram, "uMetallic");
+  m_RoughnessLocation = glGetUniformLocation(m_RenderCubeProgram, "uRoughness");
+  m_AmbientOcclusionLocation =
+      glGetUniformLocation(m_RenderCubeProgram, "uAmbientOcclusion");
   m_UseTextureLocation = glGetUniformLocation(m_RenderCubeProgram, "uUseTexture");
   m_DiffuseTextureLocation =
       glGetUniformLocation(m_RenderCubeProgram, "uDiffuseTexture");
   if (m_ModelLocation < 0 || m_ViewLocation < 0 || m_ProjectionLocation < 0 ||
-      m_LightDirLocation < 0 || m_CameraPositionLocation < 0 ||
-      m_AmbientStrengthLocation < 0 || m_DiffuseStrengthLocation < 0 ||
-      m_SpecularStrengthLocation < 0 || m_ShininessLocation < 0 ||
-      m_SpecularColorLocation < 0 || m_AlbedoLocation < 0 ||
+      m_LightPositionLocation < 0 || m_LightColorLocation < 0 ||
+      m_CameraPositionLocation < 0 || m_AlbedoLocation < 0 ||
+      m_MetallicLocation < 0 || m_RoughnessLocation < 0 ||
+      m_AmbientOcclusionLocation < 0 ||
       m_UseTextureLocation < 0 || m_DiffuseTextureLocation < 0)
   {
-    LogF("[GL] Failed to find one or more Blinn-Phong uniform locations");
+    LogF("[GL] Failed to find one or more PBR uniform locations");
     return false;
   }
 
@@ -504,19 +554,49 @@ bool GLRenderer::LoadSceneMeshes()
          UploadMeshToGeometry(*m_BunnyMesh, m_BunnyGeometry);
 }
 
+void GLRenderer::SetupMaterials()
+{
+  m_PlaneMaterial.material = Material::RoughPlastic();
+  m_PlaneMaterial.material.albedo = {0.42f, 0.44f, 0.46f};
+  m_PlaneMaterial.useTexture = true;
+  m_PlaneMaterial.diffuseTexture = m_CheckerTexture;
+
+  m_BunnyMaterial.material = Material::Iron();
+  m_BunnyMaterial.material.albedo = {0.78f, 0.78f, 0.82f};
+  m_BunnyMaterial.useTexture = false;
+  m_BunnyMaterial.diffuseTexture = 0;
+}
+
+void GLRenderer::ApplyMaterial(const GLMaterial& material)
+{
+  glUniform3f(m_AlbedoLocation, material.material.albedo.x,
+              material.material.albedo.y, material.material.albedo.z);
+  glUniform1f(m_MetallicLocation, material.material.metallic);
+  glUniform1f(m_RoughnessLocation, material.material.roughness);
+  glUniform1f(m_AmbientOcclusionLocation,
+              material.material.ambientOcclusion);
+
+  const bool useTexture = material.useTexture && material.diffuseTexture != 0;
+  glUniform1i(m_UseTextureLocation, useTexture ? 1 : 0);
+  if (useTexture)
+  {
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, material.diffuseTexture);
+    glUniform1i(m_DiffuseTextureLocation, 0);
+  }
+}
+
 void GLRenderer::DrawGeometry(const GeometryBuffer& geometry,
                               const glmath::Mat4& modelMatrix,
-                              const Vector3& albedo,
-                              bool useTexture)
+                              const GLMaterial& material)
 {
   if (geometry.vao == 0 || geometry.indexCount == 0)
   {
     return;
   }
 
+  ApplyMaterial(material);
   glUniformMatrix4fv(m_ModelLocation, 1, GL_FALSE, modelMatrix.Data());
-  glUniform3f(m_AlbedoLocation, albedo.x, albedo.y, albedo.z);
-  glUniform1i(m_UseTextureLocation, useTexture ? 1 : 0);
   glBindVertexArray(geometry.vao);
   glDrawElements(GL_TRIANGLES, geometry.indexCount, GL_UNSIGNED_INT, nullptr);
   glBindVertexArray(0);

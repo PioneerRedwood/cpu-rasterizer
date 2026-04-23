@@ -2,6 +2,7 @@
 
 #include "GLMath.hpp"
 #include "IRenderer.hpp"
+#include "Material.hpp"
 #include "Mesh.hpp"
 #include "ResourceLoader.hpp"
 #include "TGA.hpp"
@@ -50,6 +51,13 @@ private:
     GLsizei indexCount { 0 };
   };
 
+  struct GLMaterial
+  {
+    Material material { Material::RoughPlastic() };
+    bool useTexture { false };
+    GLuint diffuseTexture { 0 };
+  };
+
 private:
   bool CreateAndCompileShaders();
 
@@ -63,10 +71,13 @@ private:
 
   bool LoadCheckerTexture();
 
+  void SetupMaterials();
+
+  void ApplyMaterial(const GLMaterial& material);
+
   void DrawGeometry(const GeometryBuffer& geometry,
                     const glmath::Mat4& modelMatrix,
-                    const Vector3& albedo,
-                    bool useTexture);
+                    const GLMaterial& material);
 
 private:
   SDL_Window* m_Window { nullptr };
@@ -81,6 +92,8 @@ private:
   float m_ModelRotationYDegrees { 0.0f };
   std::unique_ptr<Mesh> m_CubeMesh;
   std::unique_ptr<Mesh> m_BunnyMesh;
+  GLMaterial m_PlaneMaterial;
+  GLMaterial m_BunnyMaterial;
 
   GeometryBuffer m_CubeGeometry;
   GeometryBuffer m_BunnyGeometry;
@@ -91,14 +104,13 @@ private:
   GLint m_ModelLocation { -1 };
   GLint m_ViewLocation { -1 };
   GLint m_ProjectionLocation { -1 };
-  GLint m_LightDirLocation { -1 };
+  GLint m_LightPositionLocation { -1 };
+  GLint m_LightColorLocation { -1 };
   GLint m_CameraPositionLocation { -1 };
-  GLint m_AmbientStrengthLocation { -1 };
-  GLint m_DiffuseStrengthLocation { -1 };
-  GLint m_SpecularStrengthLocation { -1 };
-  GLint m_ShininessLocation { -1 };
-  GLint m_SpecularColorLocation { -1 };
   GLint m_AlbedoLocation { -1 };
+  GLint m_MetallicLocation { -1 };
+  GLint m_RoughnessLocation { -1 };
+  GLint m_AmbientOcclusionLocation { -1 };
   GLint m_UseTextureLocation { -1 };
   GLint m_DiffuseTextureLocation { -1 };
 
