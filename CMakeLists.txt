@@ -20,6 +20,12 @@ file(GLOB SORUCES_FILES
     ${CMAKE_SOURCE_DIR}/src/*.cpp
 )
 
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    list(REMOVE_ITEM SORUCES_FILES
+        ${CMAKE_SOURCE_DIR}/src/GLRenderer.cpp
+    )
+endif()
+
 # Create exec file
 add_executable(${PROJECT_NAME}
     ${HEADER_FILES}
@@ -34,11 +40,17 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     CPURASTERIZER_RESOURCE_DIR="${CMAKE_SOURCE_DIR}/resources"
 )
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    CPURASTERIZER_USE_GL_RENDERER=$<BOOL:$<STREQUAL:${CMAKE_SYSTEM_NAME},Darwin>>
+)
+
 # Settings for platform
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     # Windows specific settings (Visual Studio)
     message(STATUS "Configuring for Windows (Visual Studio)")
-    add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/wd4819>")
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/wd4819>"
+    )
 
     # Windows include path
     include_directories(

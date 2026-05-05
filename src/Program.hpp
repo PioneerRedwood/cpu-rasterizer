@@ -8,12 +8,14 @@
 
 #include "Log.hpp"
 
-#define SOFTWARE_RENDERING_ENABLED 0
+#ifndef CPURASTERIZER_USE_GL_RENDERER
+#define CPURASTERIZER_USE_GL_RENDERER 0
+#endif
 
-#if SOFTWARE_RENDERING_ENABLED
-#include "Renderer.hpp"
-#else
+#if CPURASTERIZER_USE_GL_RENDERER
 #include "GLRenderer.hpp"
+#else
+#include "Renderer.hpp"
 #endif
 
 #if __has_include("DebugDump.h")
@@ -31,7 +33,7 @@ class Program {
     m_Quit = true;
 
     delete m_Renderer;
-#if not SOFTWARE_RENDERING_ENABLED
+#if CPURASTERIZER_USE_GL_RENDERER
     SDL_GL_DeleteContext(m_GLContext);
 #endif
 
@@ -45,6 +47,7 @@ class Program {
       return -1;
     }
     
+#if CPURASTERIZER_USE_GL_RENDERER
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
@@ -59,16 +62,22 @@ class Program {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 #endif
+#endif
+
+    Uint32 windowFlags = SDL_WINDOW_SHOWN;
+#if CPURASTERIZER_USE_GL_RENDERER
+    windowFlags |= SDL_WINDOW_OPENGL;
+#endif
 
     m_Window = SDL_CreateWindow("cpu-rasterizer", SDL_WINDOWPOS_CENTERED,
                               SDL_WINDOWPOS_CENTERED, width, height,
-                              debugdump::WindowFlags(SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL));
+                              debugdump::WindowFlags(windowFlags));
     if (m_Window == nullptr) {
       LogF("Window could not be created! SDL_Error: %s", SDL_GetError());
       return -1;
     }
 
-#if not SOFTWARE_RENDERING_ENABLED
+#if CPURASTERIZER_USE_GL_RENDERER
     m_GLContext = SDL_GL_CreateContext(m_Window);
     if(m_GLContext == nullptr) {
       LogF("Creating GLContext has failed! SDL_Error: %s", SDL_GetError());
@@ -85,10 +94,10 @@ class Program {
     m_ScreenWidth = width;
     m_ScreenHeight = height;
 
-#if SOFTWARE_RENDERING_ENABLED
-    m_Renderer = new Renderer(m_Window, width, height);
-#else
+#if CPURASTERIZER_USE_GL_RENDERER
     m_Renderer = new GLRenderer(m_Window, width, height);
+#else
+    m_Renderer = new Renderer(m_Window, width, height);
 #endif
 
     m_CurrentTime = SDL_GetPerformanceCounter();
@@ -157,10 +166,10 @@ class Program {
 
   int m_ScreenWidth{0};
   int m_ScreenHeight{0};
-#if SOFTWARE_RENDERING_ENABLED
-  IRenderer* m_Renderer {nullptr};
-#else
+#if CPURASTERIZER_USE_GL_RENDERER
   GLRenderer* m_Renderer {nullptr};
   SDL_GLContext m_GLContext;
+#else
+  IRenderer* m_Renderer {nullptr};
 #endif
 };
